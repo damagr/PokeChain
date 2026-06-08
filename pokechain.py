@@ -13,9 +13,11 @@ def get_prefijo_shadow():
 
 
 def criterio_ordenacion(elemento):
-    match = re.search(r"\+(\d+)", elemento)
+    # Busca el primer número secuencial que aparezca en el elemento, 
+    # sin importar los caracteres o palabras que tenga delante (!, Fuego&, Oscuro&, etc.)
+    match = re.search(r"\d+", elemento)
     if match:
-        return int(match.group(1))
+        return int(match.group(0))
     return 0
 
 
@@ -130,51 +132,71 @@ def limpiar_tab1():
 # ==========================================
 def parsear_cadena_existente(cadena):
     """
-    Parsea una cadena del tipo:
-      448,150,Oscuro&647,Mega1-&534,257
-    Devuelve un set de strings con formato 'Oscuro&+ID' o '+ID'.
-    - Elimina modificadores Mega.
-    - Oscuro/Shadow solo aplica al ID inmediatamente siguiente.
-    - Los números son IDs directos de Pokédex.
+    Parsea una cadena compleja manteniendo filtros personalizados.
+    - Elimina específicamente los modificadores Mega (ej: Mega1-).
+    - Elimina por completo elementos que contengan la palabra 'investigación'.
+    - Traduce automáticamente los tipos de Español a Inglés si está seleccionado "English".
+    - Preserva intactos filtros de tipos, exclusiones (!Hielo, !146), etc.
     """
     resultados = set()
-    # Separar por comas y punto y coma
+    # Separar la cadena por comas y puntos y comas
     tokens = re.split(r"[,;]", cadena)
-    prefijo_pendiente = ""
+
+    # Diccionario de mapeo basado en las imágenes (Español -> Inglés)
+    # Incluye expresiones regulares para curarnos en salud con las tildes
+    traduccion_tipos = {
+        r'normal': 'Normal',
+        r'fuego': 'Fire',
+        r'agua': 'Water',
+        r'planta': 'Grass',
+        r'el[eé]ctrico': 'Electric',
+        r'hielo': 'Ice',
+        r'lucha': 'Fighting',
+        r'veneno': 'Poison',
+        r'tierra': 'Ground',
+        r'volador': 'Flying',
+        r'ps[ií]quico': 'Psychic',
+        r'bicho': 'Bug',
+        r'roca': 'Rock',
+        r'fantasma': 'Ghost',
+        r'drag[oó]n': 'Dragon',
+        r'siniestro': 'Dark',
+        r'acero': 'Steel',
+        r'hada': 'Fairy'
+    }
 
     for token in tokens:
         token = token.strip()
         if not token:
             continue
 
-        # Detectar si el token es un modificador puro (Oscuro, Shadow, Mega...)
-        # o viene pegado con & al ID: "Oscuro&647" o "Mega1-&534"
-        # Primero expandimos los & internos en sub-tokens
-        partes = token.split("&")
+        # Si el elemento contiene la palabra investigación, se descarta por completo
+        if re.search(r'investigaci[oó]n', token, flags=re.IGNORECASE):
+            continue
 
-        for parte in partes:
-            parte = parte.strip()
-            if not parte:
-                continue
+        # Eliminamos el modificador Mega/Mega1- junto con el '&' que lo une
+        token_limpio = re.sub(r'\bmega\d*-?&|&\bmega\d*-?|\bmega\d*-?', '', token, flags=re.IGNORECASE)
+        token_limpio = token_limpio.strip('& ')
 
-            # ¿Es un modificador Mega? Lo ignoramos
-            if re.match(r"(?i)mega", parte):
-                continue
+        if not token_limpio:
+            continue
 
-            # ¿Es un modificador Shadow/Oscuro?
-            if re.match(r"(?i)shadow|oscuro", parte):
-                prefijo_pendiente = get_prefijo_shadow()
-                continue
+        # TRADUCCIÓN DINÁMICA: Si está en inglés, cambiamos los tipos de idioma
+        if idioma.get() == "English":
+            for esp_patron, ing_valor in traduccion_tipos.items():
+                # \b asegura que cambie la palabra exacta (ej: 'Fuego' -> 'Fire') sin romper otras cosas
+                token_limpio = re.sub(rf'\b{esp_patron}\b', ing_valor, token_limpio, flags=re.IGNORECASE)
 
-            # ¿Es un número (ID de Pokédex)?
-            if re.match(r"^\d+$", parte):
-                prefijo = prefijo_pendiente
-                prefijo_pendiente = ""
-                resultados.add(f"{prefijo}+{parte}")
-                continue
+        # Si el resultado es un ID numérico puro (ej: 806), añadimos '+' para el estándar de la app
+        if re.match(r"^\d+$", token_limpio):
+            token_limpio = f"+{token_limpio}"
+        else:
+            # Si es un formato "Oscuro&643" o "Shadow&643", lo estandarizamos usando get_prefijo_shadow()
+            if re.match(r'^(oscuro&|shadow&)\d+$', token_limpio, flags=re.IGNORECASE):
+                num = re.search(r'\d+', token_limpio).group()
+                token_limpio = f"{get_prefijo_shadow()}+{num}"
 
-            # Si no es nada de lo anterior, resetear prefijo
-            prefijo_pendiente = ""
+        resultados.add(token_limpio)
 
     return resultados
 
