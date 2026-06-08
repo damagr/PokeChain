@@ -7,32 +7,44 @@ import requests
 # ==========================================
 # LÓGICA DE DETECCIÓN DE POKÉMON
 # ==========================================
-def limpiar_nombre(nombre_sucio):
+def analizar_nombre(nombre_sucio):
+    # Detectamos si contiene (Shadow) u (Oscuro) antes de limpiar el nombre
+    prefijo = ""
+    if re.search(r"\(Shadow\)", nombre_sucio, re.IGNORECASE):
+        prefijo = "Shadow&"
+    elif re.search(r"\(Oscuro\)", nombre_sucio, re.IGNORECASE):
+        prefijo = "Oscuro&"
+
+    # Limpiamos el nombre eliminando cualquier paréntesis para la API
     nombre_limpio = re.sub(r"\s*\(.*\)", "", nombre_sucio)
-    return nombre_limpio.strip().lower()
+    return nombre_limpio.strip().lower(), prefijo
 
 
 def obtener_anteevolucion_id(nombre_pokemon):
-    nombre = limpiar_nombre(nombre_pokemon)
+    nombre, prefijo = analizar_nombre(nombre_pokemon)
     if not nombre:
         return None
 
-    url_especie = f"https://pokeapi.co/api/v2/pokemon-species/{nombre}/"
-
     try:
+        url_especie = f"https://pokeapi.co/api/v2/pokemon-species/{nombre}/"
         respuesta = requests.get(url_especie)
         if respuesta.status_code != 200:
             return None
 
         datos_especie = respuesta.json()
 
-        # Obtiene la anteevolución directa si existe, si no, su propio ID
-        if datos_especie.get("evolves_from_species"):
+        # Bucle para subir hasta la raíz de la cadena evolutiva
+        while datos_especie.get("evolves_from_species"):
             url_anteevolucion = datos_especie["evolves_from_species"]["url"]
-            id_anteevolucion = url_anteevolucion.split("/")[-2]
-            return id_anteevolucion
-        else:
-            return datos_especie["id"]
+
+            respuesta = requests.get(url_anteevolucion)
+            if respuesta.status_code == 200:
+                datos_especie = respuesta.json()
+            else:
+                break
+
+        # Devolvemos el prefijo ("Shadow&", "Oscuro&" o "") junto al +ID
+        return f"{prefijo}+{datos_especie['id']}"
 
     except Exception:
         return None
@@ -42,7 +54,6 @@ def obtener_anteevolucion_id(nombre_pokemon):
 # ACCIONES DE LA INTERFAZ
 # ==========================================
 def procesar_lista():
-    # Deshabilitamos el botón temporalmente para que no hagan doble clic
     btn_procesar.config(state=tk.DISABLED, text="Procesando...")
     ventana.update_idletasks()
 
@@ -63,19 +74,22 @@ def procesar_lista():
     ids_formateados = []
 
     for poke in lineas:
-        poke_id = obtener_anteevolucion_id(poke)
-        if poke_id:
-            ids_formateados.append(f"+{poke_id}")
+        resultado_poke = obtener_anteevolucion_id(poke)
+        if resultado_poke:
+            ids_formateados.append(resultado_poke)
 
+    # Unimos todo con puntos y comas
     resultado_final = ";".join(ids_formateados)
 
-    # Insertar el resultado en el cuadro de salida
-    txt_salida.config(state=tk.NORMAL)  # Habilitamos temporalmente para escribir
+    # Si hay resultados, añadimos un punto y coma al final de toda la cadena si lo necesitas
+    if resultado_final:
+        resultado_final += ";"
+
+    txt_salida.config(state=tk.NORMAL)
     txt_salida.delete("1.0", tk.END)
     txt_salida.insert(tk.END, resultado_final)
-    txt_salida.config(state=tk.DISABLED)  # Lo volvemos a dejar de solo lectura
+    txt_salida.config(state=tk.DISABLED)
 
-    # Restaurar botón
     btn_procesar.config(state=tk.NORMAL, text="Convertir Lista")
 
 
@@ -99,7 +113,6 @@ ventana.title("Buscador de Anteevoluciones")
 ventana.geometry("500x600")
 ventana.configure(bg="#f0f0f0")
 
-# Etiqueta Entrada
 lbl_entrada = tk.Label(
     ventana,
     text="1. Pega aquí tu lista de Pokémon:",
@@ -108,13 +121,11 @@ lbl_entrada = tk.Label(
 )
 lbl_entrada.pack(anchor="w", padx=20, pady=(15, 5))
 
-# Caja de texto de Entrada
 txt_entrada = scrolledtext.ScrolledText(
     ventana, height=10, width=55, wrap=tk.WORD
 )
 txt_entrada.pack(padx=20, pady=5)
 
-# Botón Procesar
 btn_procesar = tk.Button(
     ventana,
     text="Convertir Lista",
@@ -127,7 +138,6 @@ btn_procesar = tk.Button(
 )
 btn_procesar.pack(pady=15)
 
-# Etiqueta Salida
 lbl_salida = tk.Label(
     ventana,
     text="2. Resultado en formato de cadena:",
@@ -136,13 +146,11 @@ lbl_salida = tk.Label(
 )
 lbl_salida.pack(anchor="w", padx=20, pady=(10, 5))
 
-# Caja de texto de Salida (Bloqueada para que no se edite sin querer)
 txt_salida = scrolledtext.ScrolledText(
     ventana, height=5, width=55, wrap=tk.CHAR, state=tk.DISABLED
 )
 txt_salida.pack(padx=20, pady=5)
 
-# Botón Copiar
 btn_copiar = tk.Button(
     ventana,
     text="Copiar al Portapapeles",
@@ -155,5 +163,4 @@ btn_copiar = tk.Button(
 )
 btn_copiar.pack(pady=15)
 
-# Ejecutar la aplicación
 ventana.mainloop()
