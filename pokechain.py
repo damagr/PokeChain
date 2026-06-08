@@ -100,6 +100,7 @@ def procesar_lista():
     txt_salida.insert(tk.END, resultado_final)
     txt_salida.config(state=tk.DISABLED)
 
+    lbl_aviso.config(text="")
     btn_procesar.config(state=tk.NORMAL, text="Convertir Lista")
 
 
@@ -115,12 +116,35 @@ def copiar_al_portapapeles():
         messagebox.showwarning("Aviso", "No hay nada que copiar todavía.")
 
 
+def aplicar_liga(prefijo_liga, aviso=""):
+    contenido = txt_salida.get("1.0", tk.END).strip()
+    if not contenido:
+        messagebox.showwarning("Aviso", "No hay resultado al que añadir la liga.")
+        return
+    txt_salida.config(state=tk.NORMAL)
+    txt_salida.delete("1.0", tk.END)
+    txt_salida.insert(tk.END, prefijo_liga + contenido)
+    txt_salida.config(state=tk.DISABLED)
+    lbl_aviso.config(text=aviso)
+
+
+def aplicar_great_league():
+    aplicar_liga("PC-1500&3-4puntos de salud&3-4defensa&0-1ataque&")
+
+
+def aplicar_ultra_league():
+    aplicar_liga(
+        "PC-2500&3-4puntos de salud&3-4defensa&0-1ataque&",
+        aviso="⚠ Advertencia: algunos Pokémon de la UltraLeague requieren IVs 100% como el caso de Cradily.\nPara Pokémon de estas características, revisar a mano.",
+    )
+
+
 # ==========================================
 # DISEÑO DE LA VENTANA (GUI)
 # ==========================================
 ventana = tk.Tk()
 ventana.title("PokeChain")
-ventana.geometry("500x600")
+ventana.geometry("500x650")
 ventana.configure(bg="#f0f0f0")
 img = tk.PhotoImage(file="icono.png")
 ventana.iconphoto(True, img)
@@ -162,6 +186,45 @@ txt_salida = scrolledtext.ScrolledText(
     ventana, height=10, width=55, wrap=tk.CHAR, state=tk.DISABLED
 )
 txt_salida.pack(padx=20, pady=5, fill=tk.BOTH, expand=True)
+
+# Frame para los dos botones de liga en la misma fila
+frame_ligas = tk.Frame(ventana, bg="#f0f0f0")
+frame_ligas.pack(pady=(5, 0))
+
+btn_great = tk.Button(
+    frame_ligas,
+    text="Great League",
+    command=aplicar_great_league,
+    bg="#7B68EE",
+    fg="white",
+    font=("Arial", 10, "bold"),
+    padx=10,
+    pady=5,
+)
+btn_great.pack(side=tk.LEFT, padx=10)
+
+btn_ultra = tk.Button(
+    frame_ligas,
+    text="Ultra League",
+    command=aplicar_ultra_league,
+    bg="#FF8C00",
+    fg="white",
+    font=("Arial", 10, "bold"),
+    padx=10,
+    pady=5,
+)
+btn_ultra.pack(side=tk.LEFT, padx=10)
+
+lbl_aviso = tk.Label(
+    ventana,
+    text="",
+    bg="#f0f0f0",
+    fg="#B8860B",
+    font=("Arial", 9),
+    wraplength=460,
+    justify="left",
+)
+lbl_aviso.pack(anchor="w", padx=20, pady=(5, 0))
 
 btn_copiar = tk.Button(
     ventana,
