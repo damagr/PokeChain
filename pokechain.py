@@ -119,7 +119,7 @@ def copiar_al_portapapeles():
 # DISEÑO DE LA VENTANA (GUI)
 # ==========================================
 ventana = tk.Tk()
-ventana.title("Buscador de Anteevoluciones")
+ventana.title("PokeChain")
 ventana.geometry("500x600")
 ventana.configure(bg="#f0f0f0")
 img = tk.PhotoImage(file="icono.png")
@@ -136,7 +136,7 @@ lbl_entrada.pack(anchor="w", padx=20, pady=(15, 5))
 txt_entrada = scrolledtext.ScrolledText(
     ventana, height=10, width=55, wrap=tk.WORD
 )
-txt_entrada.pack(padx=20, pady=5)
+txt_entrada.pack(padx=20, pady=5, fill=tk.BOTH, expand=True)
 
 btn_procesar = tk.Button(
     ventana,
@@ -159,9 +159,9 @@ lbl_salida = tk.Label(
 lbl_salida.pack(anchor="w", padx=20, pady=(10, 5))
 
 txt_salida = scrolledtext.ScrolledText(
-    ventana, height=5, width=55, wrap=tk.CHAR, state=tk.DISABLED
+    ventana, height=10, width=55, wrap=tk.CHAR, state=tk.DISABLED
 )
-txt_salida.pack(padx=20, pady=5)
+txt_salida.pack(padx=20, pady=5, fill=tk.BOTH, expand=True)
 
 btn_copiar = tk.Button(
     ventana,
