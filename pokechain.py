@@ -43,7 +43,7 @@ def obtener_anteevolucion_id(nombre_pokemon):
             else:
                 break
 
-        # Devolvemos el prefijo ("Shadow&", "Oscuro&" o "") junto al +ID
+        # Devolvemos el prefijo junto al +ID
         return f"{prefijo}+{datos_especie['id']}"
 
     except Exception:
@@ -71,17 +71,23 @@ def procesar_lista():
         btn_procesar.config(state=tk.NORMAL, text="Convertir Lista")
         return
 
-    ids_formateados = []
+    # Usamos un set (conjunto) para evitar elementos duplicados automáticamente
+    ids_unicos = set()
 
     for poke in lineas:
         resultado_poke = obtener_anteevolucion_id(poke)
         if resultado_poke:
-            ids_formateados.append(resultado_poke)
+            ids_unicos.add(resultado_poke)
+
+    # Convertimos el conjunto a lista. Como los 'sets' no garantizan orden,
+    # opcionalmente puedes ordenarlos o dejarlos tal cual se procesaron.
+    # Aquí los dejamos tal cual, eliminando los repetidos.
+    lista_final = list(ids_unicos)
 
     # Unimos todo con puntos y comas
-    resultado_final = ";".join(ids_formateados)
+    resultado_final = ";".join(lista_final)
 
-    # Si hay resultados, añadimos un punto y coma al final de toda la cadena si lo necesitas
+    # Añadimos el punto y coma final si la cadena no está vacía
     if resultado_final:
         resultado_final += ";"
 
@@ -140,7 +146,7 @@ btn_procesar.pack(pady=15)
 
 lbl_salida = tk.Label(
     ventana,
-    text="2. Resultado en formato de cadena:",
+    text="2. Resultado en formato de cadena (Sin repetidos):",
     bg="#f0f0f0",
     font=("Arial", 10, "bold"),
 )
