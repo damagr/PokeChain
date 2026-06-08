@@ -8,11 +8,13 @@ import requests
 # LÓGICA DE DETECCIÓN DE POKÉMON
 # ==========================================
 def analizar_nombre(nombre_sucio):
-    prefijo = ""
-    if re.search(r"\(Shadow\)", nombre_sucio, re.IGNORECASE):
-        prefijo = "Shadow&"
-    elif re.search(r"\(Oscuro\)", nombre_sucio, re.IGNORECASE):
-        prefijo = "Oscuro&"
+    es_shadow = re.search(r"\(Shadow\)", nombre_sucio, re.IGNORECASE) or \
+                re.search(r"\(Oscuro\)", nombre_sucio, re.IGNORECASE)
+
+    if es_shadow:
+        prefijo = "Shadow&" if idioma.get() == "English" else "Oscuro&"
+    else:
+        prefijo = ""
 
     nombre_limpio = re.sub(r"\s*\(.*\)", "", nombre_sucio)
     return nombre_limpio.strip().lower(), prefijo
@@ -129,13 +131,13 @@ def aplicar_liga(prefijo_liga, aviso=""):
 
 
 def aplicar_great_league():
-    aplicar_liga("PC-1500&3-4puntos de salud&3-4defensa&0-1ataque&")
+    aplicar_liga("PC-1500&3-4puntos de salud&3-4defensa&0-1ataque&!#&")
 
 
 def aplicar_ultra_league():
     aplicar_liga(
-        "PC-2500&3-4puntos de salud&3-4defensa&0-1ataque&",
-        aviso="⚠ Advertencia: algunos Pokémon de la UltraLeague requieren IVs 100% como el caso de Cradily.\nPara Pokémon de estas características, revisar a mano.",
+        "PC-2500&3-4puntos de salud&3-4defensa&0-1ataque&!#&",
+        aviso="⚠ Advertencia: algunos Pokémon de la UltraLeague requieren IVs 100% como el caso de Cradily. Para Pokémon de estas características, revisar a mano.",
     )
 
 
@@ -144,18 +146,27 @@ def aplicar_ultra_league():
 # ==========================================
 ventana = tk.Tk()
 ventana.title("PokeChain")
-ventana.geometry("500x650")
+ventana.geometry("500x700")
 ventana.configure(bg="#f0f0f0")
 img = tk.PhotoImage(file="icono.png")
 ventana.iconphoto(True, img)
 
+# Frame para la etiqueta de entrada y el desplegable de idioma en la misma fila
+frame_entrada_header = tk.Frame(ventana, bg="#f0f0f0")
+frame_entrada_header.pack(anchor="w", padx=20, pady=(15, 5), fill=tk.X)
+
 lbl_entrada = tk.Label(
-    ventana,
+    frame_entrada_header,
     text="1. Pega aquí tu lista de Pokémon:",
     bg="#f0f0f0",
     font=("Arial", 10, "bold"),
 )
-lbl_entrada.pack(anchor="w", padx=20, pady=(15, 5))
+lbl_entrada.pack(side=tk.LEFT)
+
+idioma = tk.StringVar(value="Español")
+menu_idioma = tk.OptionMenu(frame_entrada_header, idioma, "Español", "English")
+menu_idioma.config(font=("Arial", 9), bg="#f0f0f0")
+menu_idioma.pack(side=tk.RIGHT)
 
 txt_entrada = scrolledtext.ScrolledText(
     ventana, height=10, width=55, wrap=tk.WORD
@@ -223,6 +234,7 @@ lbl_aviso = tk.Label(
     font=("Arial", 9),
     wraplength=460,
     justify="left",
+    height=3,
 )
 lbl_aviso.pack(anchor="w", padx=20, pady=(5, 0))
 
