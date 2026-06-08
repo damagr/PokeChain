@@ -122,6 +122,8 @@ ventana = tk.Tk()
 ventana.title("Buscador de Anteevoluciones")
 ventana.geometry("500x600")
 ventana.configure(bg="#f0f0f0")
+img = tk.PhotoImage(file="icono.png")
+ventana.iconphoto(True, img)
 
 lbl_entrada = tk.Label(
     ventana,
