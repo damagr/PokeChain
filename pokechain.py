@@ -173,8 +173,11 @@ txt_entrada = scrolledtext.ScrolledText(
 )
 txt_entrada.pack(padx=20, pady=5, fill=tk.BOTH, expand=True)
 
+frame_acciones = tk.Frame(ventana, bg="#f0f0f0")
+frame_acciones.pack(pady=15)
+ 
 btn_procesar = tk.Button(
-    ventana,
+    frame_acciones,
     text="Convertir Lista",
     command=procesar_lista,
     bg="#4CAF50",
@@ -183,7 +186,25 @@ btn_procesar = tk.Button(
     padx=10,
     pady=5,
 )
-btn_procesar.pack(pady=15)
+btn_procesar.pack(side=tk.LEFT, padx=10)
+ 
+btn_limpiar = tk.Button(
+    frame_acciones,
+    text="Limpiar",
+    command=lambda: [
+        txt_entrada.delete("1.0", tk.END),
+        txt_salida.config(state=tk.NORMAL),
+        txt_salida.delete("1.0", tk.END),
+        txt_salida.config(state=tk.DISABLED),
+        lbl_aviso.config(text=""),
+    ],
+    bg="#e0e0e0",
+    fg="#333333",
+    font=("Arial", 11, "bold"),
+    padx=10,
+    pady=5,
+)
+btn_limpiar.pack(side=tk.LEFT, padx=10)
 
 lbl_salida = tk.Label(
     ventana,
