@@ -8,14 +8,12 @@ import requests
 # LÓGICA DE DETECCIÓN DE POKÉMON
 # ==========================================
 def analizar_nombre(nombre_sucio):
-    # Detectamos si contiene (Shadow) u (Oscuro) antes de limpiar el nombre
     prefijo = ""
     if re.search(r"\(Shadow\)", nombre_sucio, re.IGNORECASE):
         prefijo = "Shadow&"
     elif re.search(r"\(Oscuro\)", nombre_sucio, re.IGNORECASE):
         prefijo = "Oscuro&"
 
-    # Limpiamos el nombre eliminando cualquier paréntesis para la API
     nombre_limpio = re.sub(r"\s*\(.*\)", "", nombre_sucio)
     return nombre_limpio.strip().lower(), prefijo
 
@@ -33,7 +31,6 @@ def obtener_anteevolucion_id(nombre_pokemon):
 
         datos_especie = respuesta.json()
 
-        # Bucle para subir hasta la raíz de la cadena evolutiva
         while datos_especie.get("evolves_from_species"):
             url_anteevolucion = datos_especie["evolves_from_species"]["url"]
 
@@ -43,11 +40,21 @@ def obtener_anteevolucion_id(nombre_pokemon):
             else:
                 break
 
-        # Devolvemos el prefijo junto al +ID
         return f"{prefijo}+{datos_especie['id']}"
 
     except Exception:
         return None
+
+
+def criterio_ordenacion(elemento):
+    """
+    Extrae el ID numérico de la cadena (ej. 'Shadow&+150' -> 150)
+    para poder ordenar la lista numéricamente de menor a mayor.
+    """
+    match = re.search(r"\+(\d+)", elemento)
+    if match:
+        return int(match.group(1))
+    return 0
 
 
 # ==========================================
@@ -71,7 +78,7 @@ def procesar_lista():
         btn_procesar.config(state=tk.NORMAL, text="Convertir Lista")
         return
 
-    # Usamos un set (conjunto) para evitar elementos duplicados automáticamente
+    # Usamos un conjunto para evitar duplicados
     ids_unicos = set()
 
     for poke in lineas:
@@ -79,15 +86,12 @@ def procesar_lista():
         if resultado_poke:
             ids_unicos.add(resultado_poke)
 
-    # Convertimos el conjunto a lista. Como los 'sets' no garantizan orden,
-    # opcionalmente puedes ordenarlos o dejarlos tal cual se procesaron.
-    # Aquí los dejamos tal cual, eliminando los repetidos.
-    lista_final = list(ids_unicos)
+    # Convertimos a lista y ordenamos usando nuestra regla numérica personalizada
+    lista_ordenada = sorted(list(ids_unicos), key=criterio_ordenacion)
 
     # Unimos todo con puntos y comas
-    resultado_final = ";".join(lista_final)
+    resultado_final = ";".join(lista_ordenada)
 
-    # Añadimos el punto y coma final si la cadena no está vacía
     if resultado_final:
         resultado_final += ";"
 
@@ -146,7 +150,7 @@ btn_procesar.pack(pady=15)
 
 lbl_salida = tk.Label(
     ventana,
-    text="2. Resultado en formato de cadena (Sin repetidos):",
+    text="2. Resultado ordenado por ID (Sin repetidos):",
     bg="#f0f0f0",
     font=("Arial", 10, "bold"),
 )
