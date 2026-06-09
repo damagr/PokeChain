@@ -16,10 +16,12 @@ PVPOKE_GAMEMASTER_URL = "https://raw.githubusercontent.com/pvpoke/pvpoke/master/
 PVPOKE_RANKINGS_URLS = {
     "Great League": "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/all/overall/rankings-1500.json",
     "Ultra League": "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/all/overall/rankings-2500.json",
+    "Master League": "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/all/overall/rankings-10000.json",
 }
 PVPOKE_CP_CAPS = {
     "Great League": 1500,
     "Ultra League": 2500,
+    "Master League": None,
 }
 
 LIGHT_COLORS = {
@@ -44,6 +46,8 @@ LIGHT_COLORS = {
     'great_league_hover': '#2563EB',
     'ultra_league': '#FFC107',
     'ultra_league_hover': '#FFB300',
+    'master_league': '#9B59B6',
+    'master_league_hover': '#7B2D8E',
     'toggle_on': '#38a169',
     'toggle_off': '#cbd5e0',
     'toggle_knob': '#ffffff',
@@ -71,6 +75,8 @@ DARK_COLORS = {
     'great_league_hover': '#3B82F6',
     'ultra_league': '#FFD54F',
     'ultra_league_hover': '#FFC107',
+    'master_league': '#A66DD4',
+    'master_league_hover': '#9B59B6',
     'toggle_on': '#48bb78',
     'toggle_off': '#4a5568',
     'toggle_knob': '#ffffff',
@@ -147,6 +153,15 @@ def apply_theme(style, colors):
     style.map('Ultra.TButton',
               background=[('active', colors['ultra_league_hover']),
                           ('pressed', colors['ultra_league_hover']),
+                          ('disabled', colors['border'])],
+              foreground=[('disabled', colors['fg_secondary'])])
+
+    style.configure('Master.TButton', background=colors['master_league'], foreground='white',
+                     font=('Segoe UI', 10, 'bold'), padding=(14, 7),
+                     borderwidth=0, relief='flat')
+    style.map('Master.TButton',
+              background=[('active', colors['master_league_hover']),
+                          ('pressed', colors['master_league_hover']),
                           ('disabled', colors['border'])],
               foreground=[('disabled', colors['fg_secondary'])])
 
@@ -386,17 +401,44 @@ class ToggleSwitch(tk.Canvas):
 # STATUSBAR
 # ==========================================
 class StatusBar(ttk.Frame):
-    def __init__(self, container):
+    def __init__(self, container, colors):
         super().__init__(container, style='Surface.TFrame')
+        self.colors = colors
+        self._progress = 0
+
+        self.canvas = tk.Canvas(self, height=6, highlightthickness=0,
+                                bg=colors['surface'])
+        self.canvas.pack(fill="x")
+
         self.label = ttk.Label(self, text="Listo", style='Status.TLabel',
                                anchor="w", padding=(8, 4))
         self.label.pack(fill="x")
 
-    def set_message(self, msg):
+        self._draw_bar()
+
+    def _draw_bar(self):
+        self.canvas.delete("all")
+        w = self.canvas.winfo_width()
+        if w <= 1:
+            w = 400
+        fill_w = int(w * self._progress / 100)
+        if fill_w > 0:
+            self.canvas.create_rectangle(0, 0, fill_w, 6,
+                                         fill=self.colors['primary'], outline="")
+
+    def set_progress(self, value):
+        self._progress = max(0, min(100, value))
+        self._draw_bar()
+
+    def set_message(self, msg, progress=None):
         self.label.config(text=msg)
+        if progress is not None:
+            self.set_progress(progress)
 
     def clear(self):
         self.label.config(text="Listo")
+        self._progress = 0
+        self._draw_bar()
 
 
 # ==========================================
@@ -592,25 +634,21 @@ class PvPokeTab(ttk.Frame):
 
         self.btn_great = ttk.Button(
             frame_accion, text="Great League", style='Great.TButton',
-            command=lambda: self._obtener_lista_pvp("Great League")
+            command=lambda: self._on_league_btn("Great League")
         )
         self.btn_great.grid(row=0, column=2, padx=4)
 
         self.btn_ultra = ttk.Button(
             frame_accion, text="Ultra League", style='Ultra.TButton',
-            command=lambda: self._obtener_lista_pvp("Ultra League")
+            command=lambda: self._on_league_btn("Ultra League")
         )
         self.btn_ultra.grid(row=0, column=3, padx=4)
 
-        self.frame_progreso = ttk.Frame(self)
-
-        self.progress_bar = ttk.Progressbar(
-            self.frame_progreso, orient="horizontal", length=300, mode="determinate"
+        self.btn_master = ttk.Button(
+            frame_accion, text="Master League", style='Master.TButton',
+            command=lambda: self._on_league_btn("Master League")
         )
-        self.progress_bar.pack(pady=(10, 4))
-
-        self.lbl_progreso = ttk.Label(self.frame_progreso, text="")
-        self.lbl_progreso.pack()
+        self.btn_master.grid(row=0, column=4, padx=4)
 
         self.output = TextInput(self, height=8, font=("Consolas", 10), wrap=tk.CHAR)
         self.output.grid(row=3, column=0, padx=12, pady=(6, 2), sticky="nsew")
@@ -642,30 +680,33 @@ class PvPokeTab(ttk.Frame):
         self.output.set_text(resultado)
         self.output.set_state(tk.DISABLED)
 
+    def _on_league_btn(self, liga):
+        btn = {"Great League": self.btn_great, "Ultra League": self.btn_ultra, "Master League": self.btn_master}[liga]
+        if btn.cget("text") == "Cancelar":
+            self._cancelled = True
+        else:
+            self._obtener_lista_pvp(liga)
+
     def _obtener_lista_pvp(self, liga):
         idioma = self.idioma_var.get()
-        self.btn_great.config(state=tk.DISABLED)
-        self.btn_ultra.config(state=tk.DISABLED)
-        self.frame_progreso.grid(row=3, column=0, padx=12, pady=6, sticky="ew")
-        self.progress_bar["value"] = 0
-        self.status_bar.set_message(f"Descargando datos de {liga}...")
-        self.update_idletasks()
+        btn_activo = {"Great League": self.btn_great, "Ultra League": self.btn_ultra, "Master League": self.btn_master}[liga]
+        self._cancelled = False
+        btn_activo.config(text="Cancelar")
+        for b in (self.btn_great, self.btn_ultra, self.btn_master):
+            if b is not btn_activo:
+                b.config(state=tk.DISABLED)
+        self.status_bar.set_message(f"Descargando datos de {liga}...", 0)
+        self.update()
 
         gamemaster = self.api.descargar_gamemaster()
-        if not gamemaster:
-            messagebox.showerror("Error", "No se pudieron descargar los datos de PvPoke.")
-            self.btn_great.config(state=tk.NORMAL)
-            self.btn_ultra.config(state=tk.NORMAL)
-            self.frame_progreso.grid_forget()
+        if not gamemaster or self._cancelled:
+            self._restaurar_botones_pvp()
             self.status_bar.clear()
             return
 
         rankings = self.api.descargar_rankings(liga)
-        if not rankings:
-            messagebox.showerror("Error", f"No se pudieron descargar los rankings de {liga}.")
-            self.btn_great.config(state=tk.NORMAL)
-            self.btn_ultra.config(state=tk.NORMAL)
-            self.frame_progreso.grid_forget()
+        if not rankings or self._cancelled:
+            self._restaurar_botones_pvp()
             self.status_bar.clear()
             return
 
@@ -675,11 +716,8 @@ class PvPokeTab(ttk.Frame):
 
         filtrados = self._filtrar_pvpoke(gamemaster, rankings, liga, mt_elite, oscuro, xl)
 
-        if not filtrados:
-            messagebox.showwarning("Aviso", "No se encontraron Pokemon con esos filtros.")
-            self.btn_great.config(state=tk.NORMAL)
-            self.btn_ultra.config(state=tk.NORMAL)
-            self.frame_progreso.grid_forget()
+        if not filtrados or self._cancelled:
+            self._restaurar_botones_pvp()
             self.status_bar.clear()
             return
 
@@ -692,32 +730,45 @@ class PvPokeTab(ttk.Frame):
 
         top = filtrados[:cantidad]
         total = len(top)
-        self.progress_bar["maximum"] = total
         self._cache_ids = set()
 
         cp_cap = PVPOKE_CP_CAPS.get(liga, 1500)
-        if idioma == "English":
-            self._prefijo_liga = f"cp-{cp_cap}&-1attack&3-defense&3-hp&"
+        if cp_cap is not None:
+            if idioma == "English":
+                self._prefijo_liga = f"cp-{cp_cap}&-1attack&3-defense&3-hp&"
+            else:
+                self._prefijo_liga = f"PC-{cp_cap}&3-4puntos de salud&3-4defensa&0-1ataque&"
         else:
-            self._prefijo_liga = f"PC-{cp_cap}&3-4puntos de salud&3-4defensa&0-1ataque&"
+            if idioma == "English":
+                self._prefijo_liga = "4*,3*&"
+            else:
+                self._prefijo_liga = "4*;3*&"
 
-        self.status_bar.set_message(f"Procesando {total} Pokemon...")
+        self.status_bar.set_message(f"Procesando {total} Pokemon...", 0)
 
         for i, p in enumerate(top):
+            if self._cancelled:
+                break
             nombre = limpiar_nombre_especie(p["speciesName"])
             resultado = self._obtener_id_raw(nombre)
             if resultado:
                 self._cache_ids.add(resultado)
-            self.progress_bar["value"] = i + 1
-            self.lbl_progreso.config(text=f"{i+1}/{total} ({100*(i+1)//total}%)")
-            self.update_idletasks()
+            pct = 100 * (i + 1) // total
+            self.status_bar.set_message(f"Procesando {i+1}/{total} ({pct}%)", pct)
+            self.update()
 
-        self._regenerar()
+        if self._cancelled:
+            self._restaurar_botones_pvp()
+            self.status_bar.set_message("Cancelado", 0)
+        else:
+            self._regenerar()
+            self._restaurar_botones_pvp()
+            self.status_bar.set_message(f"Completado: {total} Pokemon procesados", 100)
 
-        self.btn_great.config(state=tk.NORMAL)
-        self.btn_ultra.config(state=tk.NORMAL)
-        self.frame_progreso.grid_forget()
-        self.status_bar.set_message(f"Completado: {total} Pokemon procesados")
+    def _restaurar_botones_pvp(self):
+        self.btn_great.config(state=tk.NORMAL, text="Great League")
+        self.btn_ultra.config(state=tk.NORMAL, text="Ultra League")
+        self.btn_master.config(state=tk.NORMAL, text="Master League")
 
     def _filtrar_pvpoke(self, gamemaster, rankings, liga, mt_elite, oscuro, xl):
         cp_cap = PVPOKE_CP_CAPS.get(liga, 1500)
@@ -888,16 +939,6 @@ class DialgadexTab(ttk.Frame):
         )
         self.btn_obtener.grid(row=0, column=2, padx=4)
 
-        self.frame_progreso = ttk.Frame(self)
-
-        self.progress_bar = ttk.Progressbar(
-            self.frame_progreso, orient="horizontal", length=300, mode="determinate"
-        )
-        self.progress_bar.pack(pady=(5, 3))
-
-        self.lbl_progreso = ttk.Label(self.frame_progreso, text="")
-        self.lbl_progreso.pack()
-
         self.output = TextInput(self, height=8, font=("Consolas", 10), wrap=tk.CHAR)
         self.output.grid(row=3, column=0, padx=12, pady=(6, 2), sticky="nsew")
         self.output.set_state(tk.DISABLED)
@@ -958,18 +999,18 @@ class DialgadexTab(ttk.Frame):
         return resultado
 
     def _generar_cadena(self, lista_pokemon, cantidad):
-        self.btn_obtener.config(state=tk.DISABLED)
-        self.frame_progreso.grid(row=3, column=0, padx=12, pady=6, sticky="ew")
-        self.progress_bar["value"] = 0
-        self.status_bar.set_message("Generando cadena de busqueda...")
-        self.update_idletasks()
+        self._cancelled = False
+        self.btn_obtener.config(text="Cancelar")
+        self.status_bar.set_message("Generando cadena de busqueda...", 0)
+        self.update()
 
         top = lista_pokemon[:cantidad]
         total = len(top)
-        self.progress_bar["maximum"] = total
         self._cache_ids = set()
 
         for i, p in enumerate(top):
+            if self._cancelled:
+                break
             nombre = limpiar_nombre_especie(p["name"])
             es_shadow = p.get("shadow", False)
 
@@ -979,25 +1020,33 @@ class DialgadexTab(ttk.Frame):
 
             self._cache_ids.add((int(id_base), es_shadow))
 
-            self.progress_bar["value"] = i + 1
-            self.lbl_progreso.config(text=f"{i+1}/{total} ({100*(i+1)//total}%)")
-            self.update_idletasks()
+            pct = 100 * (i + 1) // total
+            self.status_bar.set_message(f"Procesando {i+1}/{total} ({pct}%)", pct)
+            self.update()
 
-        self._regenerar()
-
-        self.btn_obtener.config(state=tk.NORMAL)
-        self.frame_progreso.grid_forget()
-        self.status_bar.set_message(f"Completado: {total} Pokemon procesados")
+        if self._cancelled:
+            self.btn_obtener.config(state=tk.NORMAL, text="Obtener Lista")
+            self.status_bar.set_message("Cancelado", 0)
+        else:
+            self._regenerar()
+            self.btn_obtener.config(state=tk.NORMAL, text="Obtener Lista")
+            self.status_bar.set_message(f"Completado: {total} Pokemon procesados", 100)
 
     def _obtener_lista_atacantes(self):
-        self.btn_obtener.config(state=tk.DISABLED)
-        self.status_bar.set_message("Descargando datos de DialgaDex...")
-        self.update_idletasks()
+        if hasattr(self, '_cancelled') and not self._cancelled:
+            self._cancelled = True
+            self.btn_obtener.config(text="Obtener Lista")
+            self.status_bar.set_message("Cancelado", 0)
+            return
+
+        self._cancelled = False
+        self.btn_obtener.config(text="Cancelar")
+        self.status_bar.set_message("Descargando datos de DialgaDex...", 0)
+        self.update()
 
         datos = self.api.descargar_dialgadex()
-        if not datos:
-            messagebox.showerror("Error", "No se pudieron descargar los datos de DialgaDex.")
-            self.btn_obtener.config(state=tk.NORMAL)
+        if not datos or self._cancelled:
+            self.btn_obtener.config(state=tk.NORMAL, text="Obtener Lista")
             self.status_bar.clear()
             return
 
@@ -1008,15 +1057,14 @@ class DialgadexTab(ttk.Frame):
 
         if not (inedito or mega or oscuro or legendario):
             messagebox.showwarning("Aviso", "Activa al menos un filtro.")
-            self.btn_obtener.config(state=tk.NORMAL)
+            self.btn_obtener.config(state=tk.NORMAL, text="Obtener Lista")
             self.status_bar.clear()
             return
 
         filtrados = self._filtrar_atacantes(datos, inedito, mega, oscuro, legendario)
 
-        if not filtrados:
-            messagebox.showwarning("Aviso", "No se encontraron Pokemon con esos filtros.")
-            self.btn_obtener.config(state=tk.NORMAL)
+        if not filtrados or self._cancelled:
+            self.btn_obtener.config(state=tk.NORMAL, text="Obtener Lista")
             self.status_bar.clear()
             return
 
@@ -1026,6 +1074,8 @@ class DialgadexTab(ttk.Frame):
         else:
             cantidad = len(filtrados)
         cantidad = min(cantidad, len(filtrados))
+
+        self._generar_cadena(filtrados, cantidad)
 
         self._generar_cadena(filtrados, cantidad)
 
@@ -1134,7 +1184,7 @@ class PokeChainApp(tk.Tk):
         self.notebook.add(self.tab2, text="  Dialgadex  ")
 
     def _create_status_bar(self):
-        self._status_bar = StatusBar(self)
+        self._status_bar = StatusBar(self, self.current_colors)
         self._status_bar.pack(side=tk.BOTTOM, fill=tk.X)
 
     def _bind_shortcuts(self):
