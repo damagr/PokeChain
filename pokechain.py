@@ -1,6 +1,6 @@
 import re
 import tkinter as tk
-from tkinter import messagebox, scrolledtext, ttk
+from tkinter import messagebox, ttk
 import os
 import requests
 
@@ -8,10 +8,22 @@ _CACHE_ESPECIE = {}
 _CACHE_DIALGADEX = None
 _CACHE_IDS_TAB1 = None
 _CACHE_IDS_TAB2 = None
+_CACHE_GAMEMASTER = None
+_CACHE_RANKINGS = {}
+_PREFIJO_LIGA_ACTUAL = ""
 _SESSION = requests.Session()
 _TIMEOUT = 15
 
 DIALGADEX_URL = "https://raw.githubusercontent.com/mgrann03/pokemon-resources/main/pogo_pkm.min.json"
+PVPOKE_GAMEMASTER_URL = "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/gamemaster.min.json"
+PVPOKE_RANKINGS_URLS = {
+    "Great League": "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/all/overall/rankings-1500.json",
+    "Ultra League": "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/all/overall/rankings-2500.json",
+}
+PVPOKE_CP_CAPS = {
+    "Great League": 1500,
+    "Ultra League": 2500,
+}
 
 
 # ==========================================
@@ -233,27 +245,135 @@ def _regenerar_tab2():
     output_atacantes.set_state(tk.DISABLED)
 
 
-def procesar_lista():
-    global _CACHE_IDS_TAB1
-    btn_procesar.config(state=tk.DISABLED, text="Procesando...")
+def descargar_datos_pvpoke():
+    global _CACHE_GAMEMASTER
+    if _CACHE_GAMEMASTER is None:
+        try:
+            r = _SESSION.get(PVPOKE_GAMEMASTER_URL, timeout=_TIMEOUT)
+            if r.status_code == 200:
+                _CACHE_GAMEMASTER = r.json()
+        except Exception:
+            pass
+    return _CACHE_GAMEMASTER
+
+
+def descargar_rankings_pvpoke(liga):
+    if liga in _CACHE_RANKINGS:
+        return _CACHE_RANKINGS[liga]
+    url = PVPOKE_RANKINGS_URLS.get(liga)
+    if not url:
+        return None
+    try:
+        r = _SESSION.get(url, timeout=_TIMEOUT)
+        if r.status_code == 200:
+            _CACHE_RANKINGS[liga] = r.json()
+            return _CACHE_RANKINGS[liga]
+    except Exception:
+        pass
+    return None
+
+
+def filtrar_pvpoke(gamemaster, rankings, liga, mt_elite, oscuro, xl):
+    cp_cap = PVPOKE_CP_CAPS.get(liga, 1500)
+    shadow_set = set(gamemaster.get("shadowPokemon", []))
+    gm_by_name = {}
+    for p in gamemaster.get("pokemon", []):
+        gm_by_name[p["speciesName"]] = p
+        gm_by_name[p["speciesId"]] = p
+    resultado = []
+    for r in rankings:
+        nombre = r["speciesName"]
+        es_shadow = "(Shadow)" in nombre or "shadow" in nombre.lower()
+        nombre_limpio = re.sub(r"\s*\(Shadow\)", "", nombre).strip()
+        gm = gm_by_name.get(nombre_limpio) or gm_by_name.get(nombre.lower().replace(" ", "_").replace(" (shadow)", ""))
+        if not es_shadow and not oscuro:
+            if es_shadow:
+                continue
+        if not mt_elite and gm:
+            elite_moves = set(gm.get("eliteMoves", []))
+            moveset = set(r.get("moveset", []))
+            if elite_moves & moveset:
+                continue
+        if not xl and gm:
+            l25 = gm.get("level25CP", 9999)
+            if l25 < cp_cap:
+                continue
+        resultado.append(r)
+    return resultado
+
+
+def _regenerar_tab1():
+    if _CACHE_IDS_TAB1 is None:
+        return
+    prefijo_shadow = get_prefijo_shadow()
+    items = []
+    for id_num, es_shadow in _CACHE_IDS_TAB1:
+        pref = prefijo_shadow if es_shadow else ""
+        items.append(f"{pref}+{id_num}")
+    lista_ordenada = sorted(items, key=criterio_ordenacion)
+    cadena_ids = ";".join(lista_ordenada)
+    resultado = _PREFIJO_LIGA_ACTUAL + cadena_ids + "&!#" if _PREFIJO_LIGA_ACTUAL else cadena_ids + "&!#"
+    output_pokemon.set_text(resultado)
+    output_pokemon.set_state(tk.DISABLED)
+
+
+def obtener_lista_pvp(liga):
+    global _CACHE_IDS_TAB1, _PREFIJO_LIGA_ACTUAL
+    btn_great.config(state=tk.DISABLED, text="Descargando..." if liga == "Great League" else "Descargando...")
+    btn_ultra.config(state=tk.DISABLED, text="Descargando..." if liga == "Ultra League" else "Descargando...")
     frame_progreso1.pack(padx=20, pady=5, fill=tk.X)
     progress_bar1["value"] = 0
     ventana.update_idletasks()
 
-    texto_entrada = input_pokemon.get_text()
-    lineas = [l.strip() for l in texto_entrada.split("\n") if l.strip()]
-
-    if not lineas:
-        messagebox.showwarning("Aviso", "Por favor, introduce al menos un Pokemon.")
-        btn_procesar.config(state=tk.NORMAL, text="Convertir Lista")
+    gamemaster = descargar_datos_pvpoke()
+    if not gamemaster:
+        messagebox.showerror("Error", "No se pudieron descargar los datos de PvPoke.")
+        btn_great.config(state=tk.NORMAL, text="Great League")
+        btn_ultra.config(state=tk.NORMAL, text="Ultra League")
         frame_progreso1.pack_forget()
         return
 
-    total = len(lineas)
+    rankings = descargar_rankings_pvpoke(liga)
+    if not rankings:
+        messagebox.showerror("Error", f"No se pudieron descargar los rankings de {liga}.")
+        btn_great.config(state=tk.NORMAL, text="Great League")
+        btn_ultra.config(state=tk.NORMAL, text="Ultra League")
+        frame_progreso1.pack_forget()
+        return
+
+    mt_elite = var_mt_elite.get()
+    oscuro = var_oscuro1.get()
+    xl = var_xl.get()
+
+    filtrados = filtrar_pvpoke(gamemaster, rankings, liga, mt_elite, oscuro, xl)
+
+    if not filtrados:
+        messagebox.showwarning("Aviso", "No se encontraron Pokemon con esos filtros.")
+        btn_great.config(state=tk.NORMAL, text="Great League")
+        btn_ultra.config(state=tk.NORMAL, text="Ultra League")
+        frame_progreso1.pack_forget()
+        return
+
+    texto_cant = txt_cantidad1.get().strip()
+    if texto_cant.isdigit() and int(texto_cant) > 0:
+        cantidad = int(texto_cant)
+    else:
+        cantidad = len(filtrados)
+    cantidad = min(cantidad, len(filtrados))
+
+    top = filtrados[:cantidad]
+    total = len(top)
     progress_bar1["maximum"] = total
     _CACHE_IDS_TAB1 = set()
-    for i, poke in enumerate(lineas):
-        resultado = _obtener_id_raw(poke)
+
+    if idioma.get() == "English":
+        _PREFIJO_LIGA_ACTUAL = "cp-1500&-1attack&3-defense&3-hp&" if liga == "Great League" else "cp-2500&-1attack&3-defense&3-hp&"
+    else:
+        _PREFIJO_LIGA_ACTUAL = "PC-1500&3-4puntos de salud&3-4defensa&0-1ataque&" if liga == "Great League" else "PC-2500&3-4puntos de salud&3-4defensa&0-1ataque&"
+
+    for i, p in enumerate(top):
+        nombre = _limpiar_nombre_especie(p["speciesName"])
+        resultado = _obtener_id_raw(nombre)
         if resultado:
             _CACHE_IDS_TAB1.add(resultado)
         progress_bar1["value"] = i + 1
@@ -262,7 +382,8 @@ def procesar_lista():
 
     _regenerar_tab1()
 
-    btn_procesar.config(state=tk.NORMAL, text="Convertir Lista")
+    btn_great.config(state=tk.NORMAL, text="Great League")
+    btn_ultra.config(state=tk.NORMAL, text="Ultra League")
     frame_progreso1.pack_forget()
 
 
@@ -276,42 +397,7 @@ def copiar_tab1():
         messagebox.showwarning("Aviso", "No hay nada que copiar todavia.")
 
 
-_PREFIJOS_LIGA = [
-    "cp-1500&-1attack&3-defense&3-hp&",
-    "cp-2500&-1attack&3-defense&3-hp&",
-    "PC-1500&3-4puntos de salud&3-4defensa&0-1ataque&",
-    "PC-2500&3-4puntos de salud&3-4defensa&0-1ataque&",
-]
-
-def aplicar_liga(prefijo_liga, aviso=""):
-    contenido = output_pokemon.get_text().strip()
-    if not contenido:
-        messagebox.showwarning("Aviso", "No hay resultado al que anadir la liga.")
-        return
-    for p in _PREFIJOS_LIGA:
-        if contenido.startswith(p):
-            contenido = contenido[len(p):]
-            break
-    output_pokemon.set_text(prefijo_liga + contenido)
-    output_pokemon.set_state(tk.DISABLED)
-
-
-def aplicar_great_league():
-    if idioma.get() == "English":
-        aplicar_liga("cp-1500&-1attack&3-defense&3-hp&")
-    else:
-        aplicar_liga("PC-1500&3-4puntos de salud&3-4defensa&0-1ataque&")
-
-
-def aplicar_ultra_league():
-    if idioma.get() == "English":
-        aplicar_liga("cp-2500&-1attack&3-defense&3-hp&")
-    else:
-        aplicar_liga("PC-2500&3-4puntos de salud&3-4defensa&0-1ataque&")
-
-
 def limpiar_tab1():
-    input_pokemon.clear()
     output_pokemon.set_text("")
     output_pokemon.set_state(tk.DISABLED)
 
@@ -482,37 +568,70 @@ notebook.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 # PESTAÑA 1 — PVP
 # ==========================================
 tab1 = tk.Frame(notebook, bg="#f0f0f0")
-notebook.add(tab1, text="  PVP  ")
+notebook.add(tab1, text="  PvPoke  ")
 
-frame_entrada_header = tk.Frame(tab1, bg="#f0f0f0")
-frame_entrada_header.pack(anchor="w", padx=20, pady=(15, 5), fill=tk.X)
+var_mt_elite = tk.BooleanVar(value=True)
+var_oscuro1 = tk.BooleanVar(value=True)
+var_xl = tk.BooleanVar(value=True)
 
-lbl_entrada = tk.Label(
-    frame_entrada_header, text="1. Pega aqui tu lista de Pokemon:",
+frame_filtros1 = tk.LabelFrame(
+    tab1, text="Filtros (aditivos)", bg="#f0f0f0",
+    font=("Arial", 10, "bold"), padx=10, pady=8,
+)
+frame_filtros1.pack(padx=20, pady=(15, 5), fill=tk.X)
+
+chk_mt_elite = tk.Checkbutton(
+    frame_filtros1, text="MT de Élite", variable=var_mt_elite,
+    bg="#f0f0f0", font=("Arial", 10),
+)
+chk_mt_elite.grid(row=0, column=0, sticky="w", padx=5)
+Tooltip(chk_mt_elite, "Excluye Pokemon que requieren MT de Élite")
+
+chk_oscuro1 = tk.Checkbutton(
+    frame_filtros1, text="Oscuro", variable=var_oscuro1,
+    bg="#f0f0f0", font=("Arial", 10),
+)
+chk_oscuro1.grid(row=0, column=1, sticky="w", padx=5)
+Tooltip(chk_oscuro1, "Incluye Pokemon Shadow")
+
+chk_xl = tk.Checkbutton(
+    frame_filtros1, text="Caramelos XL", variable=var_xl,
+    bg="#f0f0f0", font=("Arial", 10),
+)
+chk_xl.grid(row=1, column=0, sticky="w", padx=5)
+Tooltip(chk_xl, "Incluye Pokemon que necesitan XL para alcanzar el CP cap")
+
+frame_cantidad1 = tk.Frame(tab1, bg="#f0f0f0")
+frame_cantidad1.pack(padx=20, pady=5, fill=tk.X)
+
+lbl_cantidad1 = tk.Label(
+    frame_cantidad1, text="N de Pokemon a incluir:",
     bg="#f0f0f0", font=("Arial", 10, "bold"),
 )
-lbl_entrada.pack(side=tk.LEFT)
+lbl_cantidad1.pack(side=tk.LEFT)
 
-input_pokemon = TextInput(tab1, height=10, font=("Consolas", 10), wrap=tk.WORD)
-input_pokemon.pack(padx=20, pady=5, fill=tk.BOTH, expand=True)
-input_pokemon.text.bind("<Control-v>", lambda e: pegar_completo(e, input_pokemon))
-input_pokemon.text.bind("<Control-V>", lambda e: pegar_completo(e, input_pokemon))
+txt_cantidad1 = ttk.Entry(frame_cantidad1, width=8, font=("Arial", 10))
+txt_cantidad1.insert(0, "200")
+txt_cantidad1.pack(side=tk.LEFT, padx=5)
 
-frame_acciones = tk.Frame(tab1, bg="#f0f0f0")
-frame_acciones.pack(pady=10)
+frame_botones_liga = tk.Frame(tab1, bg="#f0f0f0")
+frame_botones_liga.pack(pady=10)
 
-btn_procesar = tk.Button(
-    frame_acciones, text="Convertir Lista", command=procesar_lista,
-    bg="#4CAF50", fg="white", font=("Arial", 11, "bold"), padx=10, pady=5,
+btn_great = tk.Button(
+    frame_botones_liga, text="Great League",
+    command=lambda: obtener_lista_pvp("Great League"),
+    bg="#7B68EE", fg="white", font=("Arial", 11, "bold"), padx=10, pady=5,
 )
-btn_procesar.pack(side=tk.LEFT, padx=10)
-Tooltip(btn_procesar, "Busca anteevoluciones en PokeAPI")
+btn_great.pack(side=tk.LEFT, padx=10)
+Tooltip(btn_great, "Descarga rankings Great League (1500 CP)")
 
-btn_limpiar = tk.Button(
-    frame_acciones, text="Limpiar", command=limpiar_tab1,
-    bg="#e0e0e0", fg="#333333", font=("Arial", 11, "bold"), padx=10, pady=5,
+btn_ultra = tk.Button(
+    frame_botones_liga, text="Ultra League",
+    command=lambda: obtener_lista_pvp("Ultra League"),
+    bg="#FF8C00", fg="white", font=("Arial", 11, "bold"), padx=10, pady=5,
 )
-btn_limpiar.pack(side=tk.LEFT, padx=10)
+btn_ultra.pack(side=tk.LEFT, padx=10)
+Tooltip(btn_ultra, "Descarga rankings Ultra League (2500 CP)")
 
 frame_progreso1 = tk.Frame(tab1, bg="#f0f0f0")
 
@@ -524,45 +643,31 @@ progress_bar1.pack(pady=(10, 2))
 lbl_progreso1 = tk.Label(frame_progreso1, text="", bg="#f0f0f0", font=("Arial", 9))
 lbl_progreso1.pack()
 
-lbl_salida = tk.Label(
-    tab1, text="2. Resultado ordenado por ID (Sin repetidos):",
-    bg="#f0f0f0", font=("Arial", 10, "bold"),
-)
-lbl_salida.pack(anchor="w", padx=20, pady=(10, 5))
-
-output_pokemon = TextInput(tab1, height=4, font=("Consolas", 10), wrap=tk.CHAR)
+output_pokemon = TextInput(tab1, height=6, font=("Consolas", 10), wrap=tk.CHAR)
 output_pokemon.pack(padx=20, pady=5, fill=tk.BOTH, expand=True)
 output_pokemon.set_state(tk.DISABLED)
 
-frame_ligas = tk.Frame(tab1, bg="#f0f0f0")
-frame_ligas.pack(pady=(5, 0))
-
-btn_great = tk.Button(
-    frame_ligas, text="Great League", command=aplicar_great_league,
-    bg="#7B68EE", fg="white", font=("Arial", 10, "bold"), padx=10, pady=5,
-)
-btn_great.pack(side=tk.LEFT, padx=10)
-Tooltip(btn_great, "Anade filtro Great League (1500 CP)")
-
-btn_ultra = tk.Button(
-    frame_ligas, text="Ultra League", command=aplicar_ultra_league,
-    bg="#FF8C00", fg="white", font=("Arial", 10, "bold"), padx=10, pady=5,
-)
-btn_ultra.pack(side=tk.LEFT, padx=10)
-Tooltip(btn_ultra, "Anade filtro Ultra League (2500 CP)")
+frame_acciones1 = tk.Frame(tab1, bg="#f0f0f0")
+frame_acciones1.pack(pady=5)
 
 btn_copiar = tk.Button(
-    tab1, text="Copiar al Portapapeles", command=copiar_tab1,
+    frame_acciones1, text="Copiar al Portapapeles", command=copiar_tab1,
     bg="#008CBA", fg="white", font=("Arial", 10, "bold"), padx=10, pady=5,
 )
-btn_copiar.pack(pady=15)
+btn_copiar.pack(side=tk.LEFT, padx=10)
 Tooltip(btn_copiar, "Copia resultado al portapapeles")
+
+btn_limpiar = tk.Button(
+    frame_acciones1, text="Limpiar", command=limpiar_tab1,
+    bg="#e0e0e0", fg="#333333", font=("Arial", 10, "bold"), padx=10, pady=5,
+)
+btn_limpiar.pack(side=tk.LEFT, padx=10)
 
 # ==========================================
 # PESTAÑA 2 — MEJORES ATACANTES
 # ==========================================
 tab2 = tk.Frame(notebook, bg="#f0f0f0")
-notebook.add(tab2, text="  Atacantes  ")
+notebook.add(tab2, text="  Dialgadex  ")
 
 var_inedito = tk.BooleanVar(value=False)
 var_mega = tk.BooleanVar(value=False)
