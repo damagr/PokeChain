@@ -13,12 +13,32 @@ def get_prefijo_shadow():
 
 
 def criterio_ordenacion(elemento):
-    # Busca el primer número secuencial que aparezca en el elemento, 
-    # sin importar los caracteres o palabras que tenga delante (!, Fuego&, Oscuro&, etc.)
     match = re.search(r"\d+", elemento)
     if match:
         return int(match.group(0))
     return 0
+
+
+def buscar_anteevolucion_por_nombre(nombre):
+    """
+    Consulta PokéAPI con un nombre y devuelve el ID de la forma base.
+    Devuelve None si no se encuentra.
+    """
+    try:
+        url = f"https://pokeapi.co/api/v2/pokemon-species/{nombre.lower().strip()}/"
+        r = requests.get(url)
+        if r.status_code != 200:
+            return None
+        datos = r.json()
+        while datos.get("evolves_from_species"):
+            r2 = requests.get(datos["evolves_from_species"]["url"])
+            if r2.status_code == 200:
+                datos = r2.json()
+            else:
+                break
+        return str(datos["id"])
+    except Exception:
+        return None
 
 
 # ==========================================
@@ -113,10 +133,7 @@ def aplicar_great_league():
 
 
 def aplicar_ultra_league():
-    aplicar_liga(
-        "PC-2500&3-4puntos de salud&3-4defensa&0-1ataque&",
-        ##aviso="⚠ Advertencia: algunos Pokémon de la UltraLeague requieren IVs 100% como el caso de Cradily. Para Pokémon de estas características, revisar a mano.",
-    )
+    aplicar_liga("PC-2500&3-4puntos de salud&3-4defensa&0-1ataque&")
 
 
 def limpiar_tab1():
@@ -130,73 +147,88 @@ def limpiar_tab1():
 # ==========================================
 # PESTAÑA 2 — LÓGICA
 # ==========================================
-def parsear_cadena_existente(cadena):
+
+# Patrones que identifican líneas que NO son nombres de Pokémon
+_PATRON_RANKING    = re.compile(r"^\d+$")
+_PATRON_PORCENTAJE = re.compile(r"^\d+[,\.]\d+\s*%$")
+_PATRON_EDPS       = re.compile(r"edps\s+[\d,\.]+", re.IGNORECASE)
+_PATRON_MOVIMIENTO = re.compile(
+    r"^[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+([\s\-][A-ZÁÉÍÓÚÑa-záéíóúñ]+)*\*?$"
+)
+
+# Palabras que, si aparecen solas en una línea, la descartan
+_PALABRAS_DESCARTE = re.compile(
+    r"^(colmillo|alud|nieve|polvo|rayo|cola|psicocorte|poder|oculto|agarrón|"
+    r"embate|llama|gélida|gélido|dragón|hielo|fuego|agua|corte|fuerza|"
+    r"megapuño|placaje|burbuja|carga|vuelo|golpe|látigo|"
+    r"investigaci[oó]n).*$",
+    re.IGNORECASE
+)
+
+
+def es_linea_pokemon(linea):
     """
-    Parsea una cadena compleja manteniendo filtros personalizados.
-    - Elimina específicamente los modificadores Mega (ej: Mega1-).
-    - Elimina por completo elementos que contengan la palabra 'investigación'.
-    - Traduce automáticamente los tipos de Español a Inglés si está seleccionado "English".
-    - Preserva intactos filtros de tipos, exclusiones (!Hielo, !146), etc.
+    Devuelve True si la línea parece contener un nombre de Pokémon.
+    Descarta rankings, porcentajes, líneas de eDPS y nombres de movimientos.
+    """
+    if _PATRON_RANKING.match(linea):
+        return False
+    if _PATRON_PORCENTAJE.match(linea):
+        return False
+    if _PATRON_EDPS.search(linea):
+        return False
+    if _PALABRAS_DESCARTE.match(linea):
+        return False
+    # Debe contener al menos una letra
+    if not re.search(r"[A-Za-záéíóúñÁÉÍÓÚÑ]", linea):
+        return False
+    return True
+
+
+def limpiar_nombre_pokemon(linea):
+    """
+    A partir de una línea que contiene un nombre de Pokémon:
+    1. Detecta si es Oscuro/Shadow (palabra suelta al final).
+    2. Elimina el prefijo Mega.
+    3. Elimina contenido entre paréntesis.
+    4. Devuelve (nombre_limpio, es_shadow).
+    """
+    es_shadow = bool(re.search(r"\boscuro\b|\bshadow\b", linea, re.IGNORECASE))
+
+    # Quitar Oscuro/Shadow como palabra suelta
+    nombre = re.sub(r"\b(oscuro|shadow)\b", "", linea, flags=re.IGNORECASE)
+    # Quitar prefijo Mega
+    nombre = re.sub(r"^\s*mega\s+", "", nombre, flags=re.IGNORECASE)
+    # Quitar contenido entre paréntesis
+    nombre = re.sub(r"\s*\(.*?\)", "", nombre)
+    # Limpiar espacios extra
+    nombre = nombre.strip()
+
+    return nombre, es_shadow
+
+
+def procesar_ranking(texto):
+    """
+    Procesa el texto completo de la caja de entrada del ranking,
+    extrae nombres de Pokémon, busca anteevoluciones y devuelve un set de IDs.
     """
     resultados = set()
-    # Separar la cadena por comas y puntos y comas
-    tokens = re.split(r"[,;]", cadena)
+    lineas = [l.strip() for l in texto.split("\n") if l.strip()]
 
-    # Diccionario de mapeo basado en las imágenes (Español -> Inglés)
-    # Incluye expresiones regulares para curarnos en salud con las tildes
-    traduccion_tipos = {
-        r'normal': 'Normal',
-        r'fuego': 'Fire',
-        r'agua': 'Water',
-        r'planta': 'Grass',
-        r'el[eé]ctrico': 'Electric',
-        r'hielo': 'Ice',
-        r'lucha': 'Fighting',
-        r'veneno': 'Poison',
-        r'tierra': 'Ground',
-        r'volador': 'Flying',
-        r'ps[ií]quico': 'Psychic',
-        r'bicho': 'Bug',
-        r'roca': 'Rock',
-        r'fantasma': 'Ghost',
-        r'drag[oó]n': 'Dragon',
-        r'siniestro': 'Dark',
-        r'acero': 'Steel',
-        r'hada': 'Fairy'
-    }
-
-    for token in tokens:
-        token = token.strip()
-        if not token:
+    for linea in lineas:
+        if not es_linea_pokemon(linea):
             continue
 
-        # Si el elemento contiene la palabra investigación, se descarta por completo
-        if re.search(r'investigaci[oó]n', token, flags=re.IGNORECASE):
+        nombre, es_shadow = limpiar_nombre_pokemon(linea)
+        if not nombre:
             continue
 
-        # Eliminamos el modificador Mega/Mega1- junto con el '&' que lo une
-        token_limpio = re.sub(r'\bmega\d*-?&|&\bmega\d*-?|\bmega\d*-?', '', token, flags=re.IGNORECASE)
-        token_limpio = token_limpio.strip('& ')
-
-        if not token_limpio:
+        id_base = buscar_anteevolucion_por_nombre(nombre)
+        if not id_base:
             continue
 
-        # TRADUCCIÓN DINÁMICA: Si está en inglés, cambiamos los tipos de idioma
-        if idioma.get() == "English":
-            for esp_patron, ing_valor in traduccion_tipos.items():
-                # \b asegura que cambie la palabra exacta (ej: 'Fuego' -> 'Fire') sin romper otras cosas
-                token_limpio = re.sub(rf'\b{esp_patron}\b', ing_valor, token_limpio, flags=re.IGNORECASE)
-
-        # Si el resultado es un ID numérico puro (ej: 806), añadimos '+' para el estándar de la app
-        if re.match(r"^\d+$", token_limpio):
-            token_limpio = f"+{token_limpio}"
-        else:
-            # Si es un formato "Oscuro&643" o "Shadow&643", lo estandarizamos usando get_prefijo_shadow()
-            if re.match(r'^(oscuro&|shadow&)\d+$', token_limpio, flags=re.IGNORECASE):
-                num = re.search(r'\d+', token_limpio).group()
-                token_limpio = f"{get_prefijo_shadow()}+{num}"
-
-        resultados.add(token_limpio)
+        prefijo = get_prefijo_shadow() if es_shadow else ""
+        resultados.add(f"{prefijo}+{id_base}")
 
     return resultados
 
@@ -205,16 +237,16 @@ def procesar_concatenar():
     btn_concat.config(state=tk.DISABLED, text="Procesando...")
     ventana.update_idletasks()
 
-    cadena_existente = txt_cadena_entrada.get("1.0", tk.END).strip()
-    if not cadena_existente:
-        messagebox.showwarning("Aviso", "Por favor, introduce una cadena.")
+    texto = txt_cadena_entrada.get("1.0", tk.END).strip()
+    if not texto:
+        messagebox.showwarning("Aviso", "Por favor, introduce una lista.")
         btn_concat.config(state=tk.NORMAL, text="Limpiar y ordenar")
         return
 
-    ids = parsear_cadena_existente(cadena_existente)
+    ids = procesar_ranking(texto)
 
     if not ids:
-        messagebox.showwarning("Aviso", "No se encontraron IDs válidos en la cadena.")
+        messagebox.showwarning("Aviso", "No se encontraron Pokémon válidos en la lista.")
         btn_concat.config(state=tk.NORMAL, text="Limpiar y ordenar")
         return
 
@@ -260,17 +292,13 @@ if os.path.exists(_icono):
     img = tk.PhotoImage(file=_icono)
     ventana.iconphoto(True, img)
 
-# Idioma global (compartido entre pestañas)
 idioma = tk.StringVar(value="Español")
 
-# ==========================================
-# NOTEBOOK (pestañas)
-# ==========================================
 notebook = ttk.Notebook(ventana)
 notebook.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
 # ==========================================
-# PESTAÑA 1 — BUSCADOR DE ANTEEVOLUCIONES
+# PESTAÑA 1 — PVP
 # ==========================================
 tab1 = tk.Frame(notebook, bg="#f0f0f0")
 notebook.add(tab1, text="PVP")
@@ -345,29 +373,26 @@ btn_copiar = tk.Button(
 btn_copiar.pack(pady=15)
 
 # ==========================================
-# PESTAÑA 2 — LIMPIADOR DE CADENA
+# PESTAÑA 2 — DIALGADEX HELPER
 # ==========================================
 tab2 = tk.Frame(notebook, bg="#f0f0f0")
 notebook.add(tab2, text="Dialgadex helper")
 
-# Contenedor para alinear la etiqueta y el selector de idioma a la derecha
 frame_entrada_header2 = tk.Frame(tab2, bg="#f0f0f0")
 frame_entrada_header2.pack(anchor="w", padx=20, pady=(15, 5), fill=tk.X)
 
 lbl_cadena_entrada = tk.Label(
     frame_entrada_header2,
-    text="1. Pega aquí la cadena existente:",
+    text="1. Pega aquí el ranking:",
     bg="#f0f0f0",
     font=("Arial", 10, "bold"),
 )
 lbl_cadena_entrada.pack(side=tk.LEFT)
 
-# Replicamos el selector apuntando a la misma variable global 'idioma'
 menu_idioma2 = tk.OptionMenu(frame_entrada_header2, idioma, "Español", "English")
 menu_idioma2.config(font=("Arial", 9), bg="#f0f0f0")
 menu_idioma2.pack(side=tk.RIGHT)
 
-# Mantenemos la altura corregida (height=6) para que no se corte el diseño
 txt_cadena_entrada = scrolledtext.ScrolledText(tab2, height=6, width=55, wrap=tk.WORD)
 txt_cadena_entrada.pack(padx=20, pady=5, fill=tk.BOTH, expand=True)
 
