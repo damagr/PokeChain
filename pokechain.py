@@ -655,7 +655,6 @@ btn_copiar = tk.Button(
     bg="#008CBA", fg="white", font=("Arial", 10, "bold"), padx=10, pady=5,
 )
 btn_copiar.pack(side=tk.LEFT, padx=10)
-Tooltip(btn_copiar, "Copia resultado al portapapeles")
 
 btn_limpiar = tk.Button(
     frame_acciones1, text="Limpiar", command=limpiar_tab1,
@@ -748,7 +747,6 @@ btn_copiar2 = tk.Button(
     bg="#008CBA", fg="white", font=("Arial", 10, "bold"), padx=10, pady=5,
 )
 btn_copiar2.pack(side=tk.LEFT, padx=10)
-Tooltip(btn_copiar2, "Copia resultado al portapapeles")
 
 btn_limpiar2 = tk.Button(
     frame_acciones2, text="Limpiar", command=limpiar_tab2,
