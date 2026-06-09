@@ -95,7 +95,7 @@ def procesar_lista():
     lista_ordenada = sorted(list(ids_unicos), key=criterio_ordenacion)
     resultado_final = ";".join(lista_ordenada)
     if resultado_final:
-        resultado_final += ";"
+        resultado_final += "&!#"
 
     txt_salida.config(state=tk.NORMAL)
     txt_salida.delete("1.0", tk.END)
@@ -116,11 +116,24 @@ def copiar_tab1():
         messagebox.showwarning("Aviso", "No hay nada que copiar todavía.")
 
 
+# Prefijos de liga conocidos para poder limpiarlos antes de aplicar uno nuevo
+_PREFIJOS_LIGA = [
+    "cp-1500&-1attack&3-defense&3-hp&",
+    "cp-2500&-1attack&3-defense&3-hp&",
+    "PC-1500&3-4puntos de salud&3-4defensa&0-1ataque&",
+    "PC-2500&3-4puntos de salud&3-4defensa&0-1ataque&",
+]
+
 def aplicar_liga(prefijo_liga, aviso=""):
     contenido = txt_salida.get("1.0", tk.END).strip()
     if not contenido:
         messagebox.showwarning("Aviso", "No hay resultado al que añadir la liga.")
         return
+    # Quitar cualquier prefijo de liga que ya estuviera aplicado
+    for p in _PREFIJOS_LIGA:
+        if contenido.startswith(p):
+            contenido = contenido[len(p):]
+            break
     txt_salida.config(state=tk.NORMAL)
     txt_salida.delete("1.0", tk.END)
     txt_salida.insert(tk.END, prefijo_liga + contenido)
@@ -129,11 +142,17 @@ def aplicar_liga(prefijo_liga, aviso=""):
 
 
 def aplicar_great_league():
-    aplicar_liga("PC-1500&3-4puntos de salud&3-4defensa&0-1ataque&")
+    if idioma.get() == "English":
+        aplicar_liga("cp-1500&-1attack&3-defense&3-hp&")
+    else:
+        aplicar_liga("PC-1500&3-4puntos de salud&3-4defensa&0-1ataque&")
 
 
 def aplicar_ultra_league():
-    aplicar_liga("PC-2500&3-4puntos de salud&3-4defensa&0-1ataque&")
+    if idioma.get() == "English":
+        aplicar_liga("cp-2500&-1attack&3-defense&3-hp&")
+    else:
+        aplicar_liga("PC-2500&3-4puntos de salud&3-4defensa&0-1ataque&")
 
 
 def limpiar_tab1():
@@ -251,8 +270,12 @@ def procesar_concatenar():
         return
 
     lista_ordenada = sorted(list(ids), key=criterio_ordenacion)
-    cadena_limpia = ";".join(lista_ordenada) + ";"
-    resultado_final = "4*;3*;3-ataque&!#&" + cadena_limpia
+    cadena_limpia = ";".join(lista_ordenada)
+    if idioma.get() == "English":
+        prefijo_dialgadex = "4*,3*&3-attack&"
+    else:
+        prefijo_dialgadex = "4*;3*;3-ataque&"
+    resultado_final = prefijo_dialgadex + cadena_limpia + "&!#"
 
     txt_cadena_salida.config(state=tk.NORMAL)
     txt_cadena_salida.delete("1.0", tk.END)
