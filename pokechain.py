@@ -1,9 +1,11 @@
+import io
 import re
 import tkinter as tk
 from tkinter import messagebox, ttk
 import os
 import requests
-from ttkthemes import ThemedTk
+import PIL.Image
+import PIL.ImageDraw
 
 
 # ==========================================
@@ -19,8 +21,181 @@ PVPOKE_CP_CAPS = {
     "Great League": 1500,
     "Ultra League": 2500,
 }
-THEME_LIGHT = "arc"
-THEME_DARK = "equilux"
+
+LIGHT_COLORS = {
+    'bg': '#f0f4f8',
+    'surface': '#ffffff',
+    'fg': '#1a202c',
+    'fg_secondary': '#4a5568',
+    'primary': '#3182ce',
+    'primary_hover': '#2b6cb0',
+    'primary_active': '#2c5282',
+    'success': '#38a169',
+    'success_hover': '#2f855a',
+    'warning': '#dd6b20',
+    'warning_hover': '#c05621',
+    'danger': '#e53e3e',
+    'danger_hover': '#c53030',
+    'accent': '#4299e1',
+    'border': '#e2e8f0',
+    'tab_selected': '#3182ce',
+    'tab_normal': '#e2e8f0',
+    'great_league': '#3B82F6',
+    'great_league_hover': '#2563EB',
+    'ultra_league': '#FFC107',
+    'ultra_league_hover': '#FFB300',
+    'toggle_on': '#38a169',
+    'toggle_off': '#cbd5e0',
+    'toggle_knob': '#ffffff',
+}
+
+DARK_COLORS = {
+    'bg': '#1a202c',
+    'surface': '#2d3748',
+    'fg': '#f7fafc',
+    'fg_secondary': '#a0aec0',
+    'primary': '#4299e1',
+    'primary_hover': '#3182ce',
+    'primary_active': '#2b6cb0',
+    'success': '#48bb78',
+    'success_hover': '#38a169',
+    'warning': '#ed8936',
+    'warning_hover': '#dd6b20',
+    'danger': '#fc8181',
+    'danger_hover': '#e53e3e',
+    'accent': '#63b3ed',
+    'border': '#4a5568',
+    'tab_selected': '#4299e1',
+    'tab_normal': '#4a5568',
+    'great_league': '#60A5FA',
+    'great_league_hover': '#3B82F6',
+    'ultra_league': '#FFD54F',
+    'ultra_league_hover': '#FFC107',
+    'toggle_on': '#48bb78',
+    'toggle_off': '#4a5568',
+    'toggle_knob': '#ffffff',
+}
+
+
+# ==========================================
+# THEME ENGINE
+# ==========================================
+def apply_theme(style, colors):
+    style.theme_use('clam')
+
+    style.configure('.', background=colors['bg'], foreground=colors['fg'],
+                     font=('Segoe UI', 10))
+
+    style.configure('TFrame', background=colors['bg'])
+    style.configure('Surface.TFrame', background=colors['surface'])
+
+    style.configure('TLabel', background=colors['bg'], foreground=colors['fg'],
+                     font=('Segoe UI', 10))
+    style.configure('Secondary.TLabel', foreground=colors['fg_secondary'])
+    style.configure('Title.TLabel', font=('Segoe UI', 12, 'bold'),
+                     foreground=colors['fg'])
+    style.configure('Status.TLabel', background=colors['surface'],
+                     foreground=colors['fg_secondary'], font=('Segoe UI', 9))
+
+    style.configure('TLabelframe', background=colors['bg'],
+                     foreground=colors['fg'], bordercolor=colors['border'],
+                     relief='groove')
+    style.configure('TLabelframe.Label', background=colors['bg'],
+                     foreground=colors['fg'], font=('Segoe UI', 10, 'bold'))
+
+    style.configure('TButton', background=colors['primary'], foreground='white',
+                     font=('Segoe UI', 10, 'bold'), padding=(14, 7),
+                     borderwidth=0, relief='flat')
+    style.map('TButton',
+              background=[('active', colors['primary_hover']),
+                          ('pressed', colors['primary_active']),
+                          ('disabled', colors['border'])],
+              foreground=[('disabled', colors['fg_secondary'])])
+
+    style.configure('Success.TButton', background=colors['success'], foreground='white')
+    style.map('Success.TButton',
+              background=[('active', colors['success_hover']),
+                          ('pressed', colors['success_hover'])])
+
+    style.configure('Warning.TButton', background=colors['warning'], foreground='white')
+    style.map('Warning.TButton',
+              background=[('active', colors['warning_hover']),
+                          ('pressed', colors['warning_hover'])])
+
+    style.configure('Danger.TButton', background=colors['danger'], foreground='white')
+    style.map('Danger.TButton',
+              background=[('active', colors['danger_hover']),
+                          ('pressed', colors['danger_hover'])])
+
+    style.configure('Surface.TButton', background=colors['surface'],
+                     foreground=colors['fg'], bordercolor=colors['border'])
+    style.map('Surface.TButton',
+              background=[('active', colors['border'])])
+
+    style.configure('Great.TButton', background=colors['great_league'], foreground='white',
+                     font=('Segoe UI', 10, 'bold'), padding=(14, 7),
+                     borderwidth=0, relief='flat')
+    style.map('Great.TButton',
+              background=[('active', colors['great_league_hover']),
+                          ('pressed', colors['great_league_hover']),
+                          ('disabled', colors['border'])],
+              foreground=[('disabled', colors['fg_secondary'])])
+
+    style.configure('Ultra.TButton', background=colors['ultra_league'], foreground='#1a202c',
+                     font=('Segoe UI', 10, 'bold'), padding=(14, 7),
+                     borderwidth=0, relief='flat')
+    style.map('Ultra.TButton',
+              background=[('active', colors['ultra_league_hover']),
+                          ('pressed', colors['ultra_league_hover']),
+                          ('disabled', colors['border'])],
+              foreground=[('disabled', colors['fg_secondary'])])
+
+    style.configure('TEntry', fieldbackground=colors['surface'],
+                     foreground=colors['fg'], bordercolor=colors['border'],
+                     insertcolor=colors['fg'], padding=6)
+    style.map('TEntry',
+              fieldbackground=[('focus', colors['surface'])],
+              bordercolor=[('focus', colors['primary'])])
+
+    style.configure('TCheckbutton', background=colors['bg'],
+                     foreground=colors['fg'], indicatorcolor=colors['surface'],
+                     indicatorsize=18, padding=6)
+    style.map('TCheckbutton',
+              indicatorcolor=[('selected', colors['primary'])],
+              background=[('active', colors['bg'])])
+
+    style.configure('TRadiobutton', background=colors['bg'],
+                     foreground=colors['fg'], indicatorcolor=colors['surface'],
+                     indicatorsize=18, padding=6)
+    style.map('TRadiobutton',
+              indicatorcolor=[('selected', colors['primary'])])
+
+    style.configure('TNotebook', background=colors['bg'], borderwidth=0)
+    style.configure('TNotebook.Tab', background=colors['tab_normal'],
+                     foreground=colors['fg'], padding=[16, 6],
+                     font=('Segoe UI', 10, 'bold'))
+    style.map('TNotebook.Tab',
+              background=[('selected', colors['tab_selected']),
+                          ('!selected', colors['tab_normal'])],
+              foreground=[('selected', 'white'),
+                          ('!selected', colors['fg'])],
+              padding=[('selected', [16, 6]),
+                       ('!selected', [16, 6])])
+
+    style.configure('Horizontal.TProgressbar', background=colors['primary'],
+                     troughcolor=colors['surface'], borderwidth=0,
+                     thickness=20)
+
+    style.configure('TScrollbar', background=colors['border'],
+                     troughcolor=colors['surface'], borderwidth=0,
+                     arrowsize=12)
+    style.map('TScrollbar',
+              background=[('active', colors['fg_secondary'])])
+
+    style.configure('TOptionMenu', background=colors['surface'],
+                     foreground=colors['fg'])
+    style.map('TOptionMenu',
+              background=[('active', colors['border'])])
 
 
 # ==========================================
@@ -45,8 +220,9 @@ class ToolTip:
         self.tip_window = tw = tk.Toplevel(self.widget)
         tw.wm_overrideredirect(True)
         tw.wm_geometry(f"+{x}+{y}")
-        label = ttk.Label(
-            tw, text=self.text, relief="solid", borderwidth=1, padding=(8, 4)
+        label = tk.Label(
+            tw, text=self.text, background="#333333", foreground="white",
+            font=("Segoe UI", 9), padx=10, pady=5, relief="flat",
         )
         label.pack()
 
@@ -79,8 +255,8 @@ class TextInput(tk.Frame):
             yscrollcommand=self.scrollbar.set,
             borderwidth=0,
             highlightthickness=0,
-            padx=6,
-            pady=6,
+            padx=8,
+            pady=8,
         )
         self.text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         self.scrollbar.config(command=self.text.yview)
@@ -126,12 +302,94 @@ class TextInput(tk.Frame):
 
 
 # ==========================================
+# TOGGLE SWITCH — Widget iOS-style
+# ==========================================
+class ToggleSwitch(tk.Canvas):
+    def __init__(self, master, variable=None, command=None,
+                 on_color='#38a169', off_color='#a0aec0',
+                 button_color='#ffffff', bg=None, width=50, height=26, aa_scale=3, **kwargs):
+        if bg is None:
+            bg = master.cget('bg') if hasattr(master, 'cget') else '#d9d9d9'
+        super().__init__(master, width=width, height=height,
+                         highlightthickness=0, borderwidth=0, bg=bg, **kwargs)
+        self._aa = aa_scale
+        self._tw = width
+        self._th = height
+        self._is_on = variable.get() if variable else False
+        self._variable = variable
+        self._command = command
+        self._colors = {
+            'on': on_color,
+            'off': off_color,
+            'knob': button_color,
+        }
+        self._photo = None
+
+        self.bind("<Button-1>", self._toggle)
+        self._draw()
+
+    def _draw(self):
+        s = self._aa
+        sw, sh = self._tw * s, self._th * s
+        pad = 3 * s
+        track_h = sh - 2 * pad
+        r = track_h // 2
+
+        img = PIL.Image.new('RGBA', (sw, sh), (0, 0, 0, 0))
+        d = PIL.ImageDraw.Draw(img)
+
+        track_color = self._colors['on'] if self._is_on else self._colors['off']
+
+        left = [pad, pad, pad + track_h, sh - pad]
+        right = [sw - pad - track_h, pad, sw - pad, sh - pad]
+        mid = [pad + r, pad, sw - pad - r, sh - pad]
+
+        d.pieslice(left, 90, 270, fill=track_color)
+        d.pieslice(right, 270, 90, fill=track_color)
+        d.rectangle(mid, fill=track_color)
+
+        cx = (sw - pad - r) if self._is_on else (pad + r)
+        kr = r - 2 * s
+        knob_top = pad + 2 * s
+        knob_bot = sh - pad - 2 * s
+        d.ellipse([cx - kr, knob_top, cx + kr, knob_bot], fill=self._colors['knob'])
+
+        img = img.resize((self._tw, self._th), PIL.Image.LANCZOS)
+
+        buf = io.BytesIO()
+        img.save(buf, format='PNG')
+        buf.seek(0)
+        self._photo = tk.PhotoImage(data=buf.read())
+        self.delete("all")
+        self.create_image(0, 0, anchor="nw", image=self._photo)
+
+    def _toggle(self, event=None):
+        self._is_on = not self._is_on
+        if self._variable:
+            self._variable.set(self._is_on)
+        if self._command:
+            self._command()
+        self._draw()
+
+    def get(self):
+        return self._is_on
+
+    def set(self, value):
+        self._is_on = bool(value)
+        self._draw()
+
+    def set_bg(self, color):
+        self.configure(bg=color)
+
+
+# ==========================================
 # STATUSBAR
 # ==========================================
 class StatusBar(ttk.Frame):
     def __init__(self, container):
-        super().__init__(container, relief=tk.SUNKEN)
-        self.label = ttk.Label(self, text="Listo", anchor="w", padding=(5, 2))
+        super().__init__(container, style='Surface.TFrame')
+        self.label = ttk.Label(self, text="Listo", style='Status.TLabel',
+                               anchor="w", padding=(8, 4))
         self.label.pack(fill="x")
 
     def set_message(self, msg):
@@ -254,22 +512,22 @@ class ApiCache:
 # PESTAÑA 1 — PVP
 # ==========================================
 class PvPokeTab(ttk.Frame):
-    def __init__(self, container, api_cache, idioma_var, status_bar):
-        super().__init__(container)
+    def __init__(self, container, api_cache, idioma_var, status_bar, colors):
+        super().__init__(container, style='TFrame')
         self.api = api_cache
         self.idioma_var = idioma_var
         self.status_bar = status_bar
+        self.colors = colors
         self._cache_ids = None
         self._prefijo_liga = ""
         self._build_ui()
 
     def _build_ui(self):
         self.columnconfigure(0, weight=1)
-        self.rowconfigure(5, weight=1)
+        self.rowconfigure(3, weight=1)
 
-        # Filtros
-        frame_filtros = ttk.LabelFrame(self, text="Filtros (aditivos)", padding=10)
-        frame_filtros.grid(row=0, column=0, padx=10, pady=(10, 5), sticky="ew")
+        frame_filtros = ttk.LabelFrame(self, text=" Filtros (aditivos) ", padding=12)
+        frame_filtros.grid(row=0, column=0, padx=12, pady=(12, 6), sticky="ew")
         frame_filtros.columnconfigure(0, weight=1)
         frame_filtros.columnconfigure(1, weight=1)
         frame_filtros.columnconfigure(2, weight=1)
@@ -278,73 +536,96 @@ class PvPokeTab(ttk.Frame):
         self.var_oscuro = tk.BooleanVar(value=True)
         self.var_xl = tk.BooleanVar(value=True)
 
-        chk_mt = ttk.Checkbutton(frame_filtros, text="MT de Élite", variable=self.var_mt)
-        chk_mt.grid(row=0, column=0, sticky="w", padx=5)
-        self.tooltip_mt = ToolTip(chk_mt, get_tooltip_text(self.var_mt, "Pokemon que requieren MT de Élite"))
+        # Filtro MT de Élite
+        f_mt = ttk.Frame(frame_filtros)
+        f_mt.grid(row=0, column=0, padx=8, pady=4, sticky="ew")
+        lbl_mt = ttk.Label(f_mt, text="MT de Élite")
+        lbl_mt.pack(anchor="center")
+        self.toggle_mt = ToggleSwitch(
+            f_mt, variable=self.var_mt, bg=self.winfo_toplevel().cget('bg'),
+            on_color=self.colors['toggle_on'], off_color=self.colors['toggle_off'],
+            button_color=self.colors['toggle_knob']
+        )
+        self.toggle_mt.pack(anchor="center", pady=(4, 0))
+        self.tooltip_mt = ToolTip(lbl_mt, get_tooltip_text(self.var_mt, "Pokemon que requieren MT de Élite"))
         self.var_mt.trace_add("write", lambda *a: self.tooltip_mt.set_text(get_tooltip_text(self.var_mt, "Pokemon que requieren MT de Élite")))
 
-        chk_oscuro = ttk.Checkbutton(frame_filtros, text="Oscuro", variable=self.var_oscuro)
-        chk_oscuro.grid(row=0, column=1, sticky="w", padx=5)
-        self.tooltip_oscuro = ToolTip(chk_oscuro, get_tooltip_text(self.var_oscuro, "Pokemon Shadow"))
+        # Filtro Oscuro
+        f_oscuro = ttk.Frame(frame_filtros)
+        f_oscuro.grid(row=0, column=1, padx=8, pady=4, sticky="ew")
+        lbl_oscuro = ttk.Label(f_oscuro, text="Oscuro")
+        lbl_oscuro.pack(anchor="center")
+        self.toggle_oscuro = ToggleSwitch(
+            f_oscuro, variable=self.var_oscuro, bg=self.winfo_toplevel().cget('bg'),
+            on_color=self.colors['toggle_on'], off_color=self.colors['toggle_off'],
+            button_color=self.colors['toggle_knob']
+        )
+        self.toggle_oscuro.pack(anchor="center", pady=(4, 0))
+        self.tooltip_oscuro = ToolTip(lbl_oscuro, get_tooltip_text(self.var_oscuro, "Pokemon Shadow"))
         self.var_oscuro.trace_add("write", lambda *a: self.tooltip_oscuro.set_text(get_tooltip_text(self.var_oscuro, "Pokemon Shadow")))
 
-        chk_xl = ttk.Checkbutton(frame_filtros, text="Caramelos XL", variable=self.var_xl)
-        chk_xl.grid(row=0, column=2, sticky="w", padx=5)
-        self.tooltip_xl = ToolTip(chk_xl, get_tooltip_text(self.var_xl, "Pokemon que necesitan XL para alcanzar el CP cap"))
+        # Filtro Caramelos XL
+        f_xl = ttk.Frame(frame_filtros)
+        f_xl.grid(row=0, column=2, padx=8, pady=4, sticky="ew")
+        lbl_xl = ttk.Label(f_xl, text="Caramelos XL")
+        lbl_xl.pack(anchor="center")
+        self.toggle_xl = ToggleSwitch(
+            f_xl, variable=self.var_xl, bg=self.winfo_toplevel().cget('bg'),
+            on_color=self.colors['toggle_on'], off_color=self.colors['toggle_off'],
+            button_color=self.colors['toggle_knob']
+        )
+        self.toggle_xl.pack(anchor="center", pady=(4, 0))
+        self.tooltip_xl = ToolTip(lbl_xl, get_tooltip_text(self.var_xl, "Pokemon que necesitan XL para alcanzar el CP cap"))
         self.var_xl.trace_add("write", lambda *a: self.tooltip_xl.set_text(get_tooltip_text(self.var_xl, "Pokemon que necesitan XL para alcanzar el CP cap")))
 
-        # Cantidad
-        frame_cantidad = ttk.Frame(self)
-        frame_cantidad.grid(row=1, column=0, padx=10, pady=5, sticky="ew")
+        # Acciones: cantidad + botones de liga en una fila
+        frame_accion = ttk.Frame(self)
+        frame_accion.grid(row=1, column=0, pady=(4, 8))
+        frame_accion.columnconfigure(0, weight=1)
 
-        lbl_cantidad = ttk.Label(frame_cantidad, text="N de Pokemon a incluir:")
-        lbl_cantidad.pack(side=tk.LEFT)
+        lbl_cantidad = ttk.Label(frame_accion, text="Pokemon a incluir:")
+        lbl_cantidad.grid(row=0, column=0, sticky="e")
 
-        self.txt_cantidad = ttk.Entry(frame_cantidad, width=8)
+        self.txt_cantidad = ttk.Entry(frame_accion, width=6, justify="center")
         self.txt_cantidad.insert(0, "200")
-        self.txt_cantidad.pack(side=tk.LEFT, padx=5)
-
-        # Botones de liga
-        frame_botones = ttk.Frame(self)
-        frame_botones.grid(row=2, column=0, pady=10)
+        self.txt_cantidad.grid(row=0, column=1, padx=(4, 12))
 
         self.btn_great = ttk.Button(
-            frame_botones, text="Great League",
+            frame_accion, text="Great League", style='Great.TButton',
             command=lambda: self._obtener_lista_pvp("Great League")
         )
-        self.btn_great.pack(side=tk.LEFT, padx=10)
+        self.btn_great.grid(row=0, column=2, padx=4)
 
         self.btn_ultra = ttk.Button(
-            frame_botones, text="Ultra League",
+            frame_accion, text="Ultra League", style='Ultra.TButton',
             command=lambda: self._obtener_lista_pvp("Ultra League")
         )
-        self.btn_ultra.pack(side=tk.LEFT, padx=10)
+        self.btn_ultra.grid(row=0, column=3, padx=4)
 
-        # Barra de progreso
         self.frame_progreso = ttk.Frame(self)
 
         self.progress_bar = ttk.Progressbar(
             self.frame_progreso, orient="horizontal", length=300, mode="determinate"
         )
-        self.progress_bar.pack(pady=(10, 2))
+        self.progress_bar.pack(pady=(10, 4))
 
         self.lbl_progreso = ttk.Label(self.frame_progreso, text="")
         self.lbl_progreso.pack()
 
-        # Resultado
         self.output = TextInput(self, height=8, font=("Consolas", 10), wrap=tk.CHAR)
-        self.output.grid(row=5, column=0, padx=10, pady=5, sticky="nsew")
+        self.output.grid(row=3, column=0, padx=12, pady=(6, 2), sticky="nsew")
         self.output.set_state(tk.DISABLED)
 
-        # Acciones
         frame_acciones = ttk.Frame(self)
-        frame_acciones.grid(row=6, column=0, pady=5)
+        frame_acciones.grid(row=4, column=0, pady=(6, 10))
 
-        btn_copiar = ttk.Button(frame_acciones, text="Copiar al Portapapeles", command=self._copiar)
-        btn_copiar.pack(side=tk.LEFT, padx=10)
+        btn_copiar = ttk.Button(frame_acciones, text="Copiar al Portapapeles",
+                                style='Success.TButton', command=self._copiar)
+        btn_copiar.pack(side=tk.LEFT, padx=6)
 
-        btn_limpiar = ttk.Button(frame_acciones, text="Limpiar", command=self._limpiar)
-        btn_limpiar.pack(side=tk.LEFT, padx=10)
+        btn_limpiar = ttk.Button(frame_acciones, text="Limpiar",
+                                 style='Surface.TButton', command=self._limpiar)
+        btn_limpiar.pack(side=tk.LEFT, padx=6)
 
     def _regenerar(self):
         if self._cache_ids is None:
@@ -365,7 +646,7 @@ class PvPokeTab(ttk.Frame):
         idioma = self.idioma_var.get()
         self.btn_great.config(state=tk.DISABLED)
         self.btn_ultra.config(state=tk.DISABLED)
-        self.frame_progreso.grid(row=3, column=0, padx=10, pady=5, sticky="ew")
+        self.frame_progreso.grid(row=3, column=0, padx=12, pady=6, sticky="ew")
         self.progress_bar["value"] = 0
         self.status_bar.set_message(f"Descargando datos de {liga}...")
         self.update_idletasks()
@@ -499,96 +780,138 @@ class PvPokeTab(ttk.Frame):
     def on_idioma_change(self):
         self._regenerar()
 
+    def update_toggle_bgs(self, bg):
+        for toggle in (self.toggle_mt, self.toggle_oscuro, self.toggle_xl):
+            toggle.set_bg(bg)
+
 
 # ==========================================
 # PESTAÑA 2 — DIALGADEX
 # ==========================================
 class DialgadexTab(ttk.Frame):
-    def __init__(self, container, api_cache, idioma_var, status_bar):
-        super().__init__(container)
+    def __init__(self, container, api_cache, idioma_var, status_bar, colors):
+        super().__init__(container, style='TFrame')
         self.api = api_cache
         self.idioma_var = idioma_var
         self.status_bar = status_bar
+        self.colors = colors
         self._cache_ids = None
         self._build_ui()
 
     def _build_ui(self):
         self.columnconfigure(0, weight=1)
-        self.rowconfigure(5, weight=1)
+        self.rowconfigure(3, weight=1)
 
-        # Filtros
-        frame_filtros = ttk.LabelFrame(self, text="Filtros (aditivos)", padding=10)
-        frame_filtros.grid(row=0, column=0, padx=10, pady=(10, 5), sticky="ew")
+        frame_filtros = ttk.LabelFrame(self, text=" Filtros (aditivos) ", padding=12)
+        frame_filtros.grid(row=0, column=0, padx=12, pady=(12, 6), sticky="ew")
         frame_filtros.columnconfigure(0, weight=1)
         frame_filtros.columnconfigure(1, weight=1)
+        frame_filtros.rowconfigure(0, weight=1)
+        frame_filtros.rowconfigure(1, weight=1)
 
         self.var_inedito = tk.BooleanVar(value=False)
         self.var_mega = tk.BooleanVar(value=False)
         self.var_oscuro = tk.BooleanVar(value=True)
         self.var_legendario = tk.BooleanVar(value=True)
 
-        chk_inedito = ttk.Checkbutton(frame_filtros, text="Inedito", variable=self.var_inedito)
-        chk_inedito.grid(row=0, column=0, sticky="w", padx=5)
-        self.tooltip_inedito = ToolTip(chk_inedito, get_tooltip_text(self.var_inedito, "Pokemon no lanzados"))
+        # Filtro Inédito
+        f_inedito = ttk.Frame(frame_filtros)
+        f_inedito.grid(row=0, column=0, padx=8, pady=4, sticky="ew")
+        lbl_inedito = ttk.Label(f_inedito, text="Inedito")
+        lbl_inedito.pack(anchor="center")
+        self.toggle_inedito = ToggleSwitch(
+            f_inedito, variable=self.var_inedito, bg=self.winfo_toplevel().cget('bg'),
+            on_color=self.colors['toggle_on'], off_color=self.colors['toggle_off'],
+            button_color=self.colors['toggle_knob']
+        )
+        self.toggle_inedito.pack(anchor="center", pady=(4, 0))
+        self.tooltip_inedito = ToolTip(lbl_inedito, get_tooltip_text(self.var_inedito, "Pokemon no lanzados"))
         self.var_inedito.trace_add("write", lambda *a: self.tooltip_inedito.set_text(get_tooltip_text(self.var_inedito, "Pokemon no lanzados")))
 
-        chk_mega = ttk.Checkbutton(frame_filtros, text="Mega / Primigenio", variable=self.var_mega)
-        chk_mega.grid(row=0, column=1, sticky="w", padx=5)
-        self.tooltip_mega = ToolTip(chk_mega, get_tooltip_text(self.var_mega, "Pokemon Mega y Primigenio"))
+        # Filtro Mega / Primigenio
+        f_mega = ttk.Frame(frame_filtros)
+        f_mega.grid(row=0, column=1, padx=8, pady=4, sticky="ew")
+        lbl_mega = ttk.Label(f_mega, text="Mega / Primigenio")
+        lbl_mega.pack(anchor="center")
+        self.toggle_mega = ToggleSwitch(
+            f_mega, variable=self.var_mega, bg=self.winfo_toplevel().cget('bg'),
+            on_color=self.colors['toggle_on'], off_color=self.colors['toggle_off'],
+            button_color=self.colors['toggle_knob']
+        )
+        self.toggle_mega.pack(anchor="center", pady=(4, 0))
+        self.tooltip_mega = ToolTip(lbl_mega, get_tooltip_text(self.var_mega, "Pokemon Mega y Primigenio"))
         self.var_mega.trace_add("write", lambda *a: self.tooltip_mega.set_text(get_tooltip_text(self.var_mega, "Pokemon Mega y Primigenio")))
 
-        chk_oscuro = ttk.Checkbutton(frame_filtros, text="Oscuro", variable=self.var_oscuro)
-        chk_oscuro.grid(row=1, column=0, sticky="w", padx=5)
-        self.tooltip_oscuro = ToolTip(chk_oscuro, get_tooltip_text(self.var_oscuro, "todas las formas Shadow-eligibles"))
+        # Filtro Oscuro
+        f_oscuro = ttk.Frame(frame_filtros)
+        f_oscuro.grid(row=1, column=0, padx=8, pady=4, sticky="ew")
+        lbl_oscuro = ttk.Label(f_oscuro, text="Oscuro")
+        lbl_oscuro.pack(anchor="center")
+        self.toggle_oscuro = ToggleSwitch(
+            f_oscuro, variable=self.var_oscuro, bg=self.winfo_toplevel().cget('bg'),
+            on_color=self.colors['toggle_on'], off_color=self.colors['toggle_off'],
+            button_color=self.colors['toggle_knob']
+        )
+        self.toggle_oscuro.pack(anchor="center", pady=(4, 0))
+        self.tooltip_oscuro = ToolTip(lbl_oscuro, get_tooltip_text(self.var_oscuro, "todas las formas Shadow-eligibles"))
         self.var_oscuro.trace_add("write", lambda *a: self.tooltip_oscuro.set_text(get_tooltip_text(self.var_oscuro, "todas las formas Shadow-eligibles")))
 
-        chk_legendario = ttk.Checkbutton(frame_filtros, text="Legendario", variable=self.var_legendario)
-        chk_legendario.grid(row=1, column=1, sticky="w", padx=5)
-        self.tooltip_legendario = ToolTip(chk_legendario, get_tooltip_text(self.var_legendario, "Legendary, Mythic y Ultra Beast"))
+        # Filtro Legendario
+        f_legendario = ttk.Frame(frame_filtros)
+        f_legendario.grid(row=1, column=1, padx=8, pady=4, sticky="ew")
+        lbl_legendario = ttk.Label(f_legendario, text="Legendario")
+        lbl_legendario.pack(anchor="center")
+        self.toggle_legendario = ToggleSwitch(
+            f_legendario, variable=self.var_legendario, bg=self.winfo_toplevel().cget('bg'),
+            on_color=self.colors['toggle_on'], off_color=self.colors['toggle_off'],
+            button_color=self.colors['toggle_knob']
+        )
+        self.toggle_legendario.pack(anchor="center", pady=(4, 0))
+        self.tooltip_legendario = ToolTip(lbl_legendario, get_tooltip_text(self.var_legendario, "Legendary, Mythic y Ultra Beast"))
         self.var_legendario.trace_add("write", lambda *a: self.tooltip_legendario.set_text(get_tooltip_text(self.var_legendario, "Legendary, Mythic y Ultra Beast")))
 
-        # Cantidad
-        frame_cantidad = ttk.Frame(self)
-        frame_cantidad.grid(row=1, column=0, padx=10, pady=5, sticky="ew")
+        # Acciones: cantidad + botón obtener en una fila
+        frame_accion = ttk.Frame(self)
+        frame_accion.grid(row=1, column=0, pady=(4, 8))
+        frame_accion.columnconfigure(0, weight=1)
 
-        lbl_cantidad = ttk.Label(frame_cantidad, text="N de Pokemon a incluir:")
-        lbl_cantidad.pack(side=tk.LEFT)
+        lbl_cantidad = ttk.Label(frame_accion, text="Pokemon a incluir:")
+        lbl_cantidad.grid(row=0, column=0, sticky="e")
 
-        self.txt_cantidad = ttk.Entry(frame_cantidad, width=8)
+        self.txt_cantidad = ttk.Entry(frame_accion, width=6, justify="center")
         self.txt_cantidad.insert(0, "200")
-        self.txt_cantidad.pack(side=tk.LEFT, padx=5)
+        self.txt_cantidad.grid(row=0, column=1, padx=(4, 12))
 
-        # Boton obtener
         self.btn_obtener = ttk.Button(
-            self, text="Obtener Lista", command=self._obtener_lista_atacantes
+            frame_accion, text="Obtener Lista", style='Success.TButton',
+            command=self._obtener_lista_atacantes
         )
-        self.btn_obtener.grid(row=2, column=0, pady=10)
+        self.btn_obtener.grid(row=0, column=2, padx=4)
 
-        # Barra de progreso
         self.frame_progreso = ttk.Frame(self)
 
         self.progress_bar = ttk.Progressbar(
             self.frame_progreso, orient="horizontal", length=300, mode="determinate"
         )
-        self.progress_bar.pack(pady=(5, 2))
+        self.progress_bar.pack(pady=(5, 3))
 
         self.lbl_progreso = ttk.Label(self.frame_progreso, text="")
         self.lbl_progreso.pack()
 
-        # Resultado
         self.output = TextInput(self, height=8, font=("Consolas", 10), wrap=tk.CHAR)
-        self.output.grid(row=5, column=0, padx=10, pady=5, sticky="nsew")
+        self.output.grid(row=3, column=0, padx=12, pady=(6, 2), sticky="nsew")
         self.output.set_state(tk.DISABLED)
 
-        # Acciones
         frame_acciones = ttk.Frame(self)
-        frame_acciones.grid(row=6, column=0, pady=5)
+        frame_acciones.grid(row=4, column=0, pady=(6, 10))
 
-        btn_copiar = ttk.Button(frame_acciones, text="Copiar al Portapapeles", command=self._copiar)
-        btn_copiar.pack(side=tk.LEFT, padx=10)
+        btn_copiar = ttk.Button(frame_acciones, text="Copiar al Portapapeles",
+                                style='Success.TButton', command=self._copiar)
+        btn_copiar.pack(side=tk.LEFT, padx=6)
 
-        btn_limpiar = ttk.Button(frame_acciones, text="Limpiar", command=self._limpiar)
-        btn_limpiar.pack(side=tk.LEFT, padx=10)
+        btn_limpiar = ttk.Button(frame_acciones, text="Limpiar",
+                                 style='Surface.TButton', command=self._limpiar)
+        btn_limpiar.pack(side=tk.LEFT, padx=6)
 
     def _regenerar(self):
         if self._cache_ids is None:
@@ -636,7 +959,7 @@ class DialgadexTab(ttk.Frame):
 
     def _generar_cadena(self, lista_pokemon, cantidad):
         self.btn_obtener.config(state=tk.DISABLED)
-        self.frame_progreso.grid(row=3, column=0, padx=10, pady=5, sticky="ew")
+        self.frame_progreso.grid(row=3, column=0, padx=12, pady=6, sticky="ew")
         self.progress_bar["value"] = 0
         self.status_bar.set_message("Generando cadena de busqueda...")
         self.update_idletasks()
@@ -722,41 +1045,47 @@ class DialgadexTab(ttk.Frame):
     def on_idioma_change(self):
         self._regenerar()
 
+    def update_toggle_bgs(self, bg):
+        for toggle in (self.toggle_inedito, self.toggle_mega, self.toggle_oscuro, self.toggle_legendario):
+            toggle.set_bg(bg)
+
 
 # ==========================================
 # VENTANA PRINCIPAL
 # ==========================================
-class PokeChainApp(ThemedTk):
+class PokeChainApp(tk.Tk):
     def __init__(self):
-        super().__init__(themebg=True)
-        self.set_theme(THEME_LIGHT)
+        super().__init__()
         self.title("PokeChain")
-        self.geometry("600x850")
-        self.minsize(520, 700)
+        self.geometry("620x870")
+        self.minsize(540, 720)
 
+        self.style = ttk.Style()
         self.dark_mode = False
         self.idioma = tk.StringVar(value="Español")
 
-        # API Cache compartido
         self.api_cache = ApiCache()
 
-        # Icono
         BASE_DIR = os.path.dirname(os.path.abspath(__file__))
         _icono = os.path.join(BASE_DIR, "icono.png")
+        self._icon_img = None
         if os.path.exists(_icono):
-            img = tk.PhotoImage(file=_icono)
-            self.iconphoto(True, img)
+            try:
+                self._icon_img = tk.PhotoImage(file=_icono)
+                self.iconphoto(True, self._icon_img)
+            except tk.TclError:
+                pass
 
-        # Crear UI
+        apply_theme(self.style, LIGHT_COLORS)
+        self.configure(bg=LIGHT_COLORS['bg'])
+        self.current_colors = LIGHT_COLORS
+
         self._create_menu()
         self._create_header()
         self._create_status_bar()
         self._create_notebook()
 
-        # Atajos de teclado
         self._bind_shortcuts()
-
-        # Trace de idioma
         self.idioma.trace_add("write", self._on_idioma_change)
 
     def _create_menu(self):
@@ -782,23 +1111,24 @@ class PokeChainApp(ThemedTk):
 
     def _create_header(self):
         frame_top = ttk.Frame(self)
-        frame_top.pack(fill=tk.X, padx=10, pady=(10, 0))
+        frame_top.pack(fill=tk.X, padx=12, pady=(10, 0))
 
         lbl_idioma = ttk.Label(frame_top, text="Idioma:")
         lbl_idioma.pack(side=tk.LEFT)
 
         menu_idioma = ttk.OptionMenu(frame_top, self.idioma, "Español", "Español", "English")
-        menu_idioma.pack(side=tk.LEFT, padx=5)
+        menu_idioma.pack(side=tk.LEFT, padx=6)
 
-        btn_tema = ttk.Button(frame_top, text="Cambiar tema", command=self._toggle_theme)
+        btn_tema = ttk.Button(frame_top, text="Cambiar tema",
+                              style='Surface.TButton', command=self._toggle_theme)
         btn_tema.pack(side=tk.RIGHT)
 
     def _create_notebook(self):
         self.notebook = ttk.Notebook(self)
-        self.notebook.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        self.notebook.pack(fill=tk.BOTH, expand=True, padx=12, pady=10)
 
-        self.tab1 = PvPokeTab(self.notebook, self.api_cache, self.idioma, self._status_bar)
-        self.tab2 = DialgadexTab(self.notebook, self.api_cache, self.idioma, self._status_bar)
+        self.tab1 = PvPokeTab(self.notebook, self.api_cache, self.idioma, self._status_bar, self.current_colors)
+        self.tab2 = DialgadexTab(self.notebook, self.api_cache, self.idioma, self._status_bar, self.current_colors)
 
         self.notebook.add(self.tab1, text="  PvPoke  ")
         self.notebook.add(self.tab2, text="  Dialgadex  ")
@@ -815,10 +1145,18 @@ class PokeChainApp(ThemedTk):
 
     def _toggle_theme(self):
         if self.dark_mode:
-            self.set_theme(THEME_LIGHT)
+            apply_theme(self.style, LIGHT_COLORS)
+            self.configure(bg=LIGHT_COLORS['bg'])
+            self.current_colors = LIGHT_COLORS
+            new_bg = LIGHT_COLORS['bg']
         else:
-            self.set_theme(THEME_DARK)
+            apply_theme(self.style, DARK_COLORS)
+            self.configure(bg=DARK_COLORS['bg'])
+            self.current_colors = DARK_COLORS
+            new_bg = DARK_COLORS['bg']
         self.dark_mode = not self.dark_mode
+        self.tab1.update_toggle_bgs(new_bg)
+        self.tab2.update_toggle_bgs(new_bg)
         self._status_bar.set_message("Tema cambiado a " + ("Claro" if not self.dark_mode else "Oscuro"))
 
     def _on_idioma_change(self, *args):
