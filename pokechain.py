@@ -1051,6 +1051,7 @@ class DialgadexTab(ttk.Frame):
                     id_base = self.api.buscar_anteevolucion(nombre_clean)
                     if id_base:
                         id_pokemon = int(id_base)
+                        nombre_base = nombre_clean
             entrada = (id_pokemon, nombre_base.lower(), es_shadow)
 
             if entrada not in self._cache_ids:
