@@ -742,7 +742,7 @@ class PvPokeTab(ttk.Frame):
                 self._prefijo_liga = f"PC-{cp_cap}&3-4puntos de salud&3-4defensa&0-1ataque&"
         else:
             if idioma == "English":
-                self._prefijo_liga = "4*,3*&"
+                self._prefijo_liga = "4*;3*&"
             else:
                 self._prefijo_liga = "4*;3*&"
 
@@ -964,7 +964,7 @@ class DialgadexTab(ttk.Frame):
             return
         idioma = self.idioma_var.get()
         prefijo_shadow = get_prefijo_shadow(idioma)
-        prefijo_calidad = "4*,3*&3-attack&" if idioma == "English" else "4*;3*&3-ataque&"
+        prefijo_calidad = "4*;3*&3-attack&" if idioma == "English" else "4*;3*&3-ataque&"
         items = []
         for id_base, es_shadow in self._cache_ids:
             pref = prefijo_shadow if es_shadow else ""
