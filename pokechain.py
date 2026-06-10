@@ -571,6 +571,7 @@ class PvPokeTab(ttk.Frame):
         self.colors = colors
         self._cache_ids = None
         self._prefijo_liga = ""
+        self._current_liga = None
         self._build_ui()
 
     def _build_ui(self):
@@ -674,18 +675,30 @@ class PvPokeTab(ttk.Frame):
                                  style='Surface.TButton', command=self._limpiar)
         btn_limpiar.pack(side=tk.LEFT, padx=6)
 
+    def _get_prefijo_liga(self, liga, idioma):
+        """Calcula el prefijo de liga según el idioma actual."""
+        cp_cap = PVPOKE_CP_CAPS.get(liga)
+        if cp_cap is not None:
+            if idioma == "English":
+                return f"cp-{cp_cap}&-1attack&3-defense&3-hp&"
+            return f"PC-{cp_cap}&3-4puntos de salud&3-4defensa&0-1ataque&"
+        if idioma == "English":
+            return "4*;3*&"
+        return "4*;3*&"
+
     def _regenerar(self):
-        if self._cache_ids is None:
+        if self._cache_ids is None or self._current_liga is None:
             return
         idioma = self.idioma_var.get()
         prefijo_shadow = get_prefijo_shadow(idioma)
+        prefijo_liga = self._get_prefijo_liga(self._current_liga, idioma)
         items = []
         for id_num, es_shadow in self._cache_ids:
             pref = prefijo_shadow if es_shadow else ""
             items.append(f"{pref}+{id_num}")
         lista_ordenada = sorted(items, key=criterio_ordenacion)
         cadena_ids = ";".join(lista_ordenada)
-        resultado = self._prefijo_liga + cadena_ids + "&!#" if self._prefijo_liga else cadena_ids + "&!#"
+        resultado = prefijo_liga + cadena_ids + "&!#" if prefijo_liga else cadena_ids + "&!#"
         self.output.set_text(resultado)
         self.output.set_state(tk.DISABLED)
 
@@ -740,18 +753,9 @@ class PvPokeTab(ttk.Frame):
         top = filtrados[:cantidad]
         total = len(top)
         self._cache_ids = set()
+        self._current_liga = liga
 
-        cp_cap = PVPOKE_CP_CAPS.get(liga, 1500)
-        if cp_cap is not None:
-            if idioma == "English":
-                self._prefijo_liga = f"cp-{cp_cap}&-1attack&3-defense&3-hp&"
-            else:
-                self._prefijo_liga = f"PC-{cp_cap}&3-4puntos de salud&3-4defensa&0-1ataque&"
-        else:
-            if idioma == "English":
-                self._prefijo_liga = "4*;3*&"
-            else:
-                self._prefijo_liga = "4*;3*&"
+        self._prefijo_liga = self._get_prefijo_liga(liga, idioma)
 
         self.status_bar.set_message(f"Procesando {total} Pokemon...", 0)
 
@@ -1074,9 +1078,12 @@ class DialgadexTab(ttk.Frame):
                 )
                 if chromium_dirs:
                     chromium_dir = chromium_dirs[-1]
-                    launch_kwargs["executable_path"] = os.path.join(
-                        chromium_dir, "chrome-linux", "chrome"
-                    )
+                    # Intentar chrome-linux64 (nuevo) y fallback a chrome-linux (legacy)
+                    for subdir in ("chrome-linux64", "chrome-linux"):
+                        exe_path = os.path.join(chromium_dir, subdir, "chrome")
+                        if os.path.exists(exe_path):
+                            launch_kwargs["executable_path"] = exe_path
+                            break
             else:
                 launch_kwargs["channel"] = "chromium"
 
