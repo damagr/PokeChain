@@ -1,0 +1,212 @@
+name: Build
+
+on:
+  push:
+    branches: [main, master]
+    tags: ["v*"]
+  release:
+    types: [published]
+  workflow_dispatch:
+
+env:
+  PLAYWRIGHT_BROWSERS_PATH: "${{ github.workspace }}/ms-playwright"
+  APP_NAME: pokechain
+  APP_VERSION: ${{ github.ref_type == 'tag' && github.ref_name || '0.0.0' }}
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        id: playwright-cache
+        with:
+          path: ${{ env.PLAYWRIGHT_BROWSERS_PATH }}
+          key: playwright-linux-${{ hashFiles('**/requirements.txt') }}
+
+      - name: Install Playwright Chromium
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: |
+          python -m playwright install chromium
+          python -m playwright install chromium-headless-shell
+
+      - name: Build executable
+        run: |
+          mkdir -p build/dist build/package
+          pyinstaller \
+            --onedir \
+            --name "$APP_NAME" \
+            --distpath build/dist \
+            --workpath build/work \
+            --specpath build \
+            --add-data "${{ github.workspace }}/icono.png:." \
+            --hidden-import plyer.platforms.linux.notification \
+            --add-data "$PLAYWRIGHT_BROWSERS_PATH/chromium-*:ms-playwright/" \
+            --add-data "$PLAYWRIGHT_BROWSERS_PATH/chromium_headless_shell-*:ms-playwright/" \
+            --add-data "$PLAYWRIGHT_BROWSERS_PATH/ffmpeg-*:ms-playwright/" \
+            pokechain.py
+
+      - name: Package .deb
+        run: |
+          PACKAGE_DIR="build/package"
+          mkdir -p "$PACKAGE_DIR/DEBIAN"
+          mkdir -p "$PACKAGE_DIR/usr/bin"
+          mkdir -p "$PACKAGE_DIR/usr/share/applications"
+          mkdir -p "$PACKAGE_DIR/usr/share/icons/hicolor/256x256/apps"
+          mkdir -p "$PACKAGE_DIR/opt/$APP_NAME"
+
+          cp -a "build/dist/$APP_NAME"/* "$PACKAGE_DIR/opt/$APP_NAME/"
+          ln -sf "/opt/$APP_NAME/$APP_NAME" "$PACKAGE_DIR/usr/bin/$APP_NAME"
+          cp build/$APP_NAME.desktop "$PACKAGE_DIR/usr/share/applications/"
+          cp icono.png "$PACKAGE_DIR/usr/share/icons/hicolor/256x256/apps/$APP_NAME.png"
+
+          cat > "$PACKAGE_DIR/DEBIAN/control" <<EOF
+          Package: $APP_NAME
+          Version: ${{ env.APP_VERSION }}
+          Section: games
+          Priority: optional
+          Architecture: amd64
+          Depends: python3 (>= 3.10), libnotify-bin
+          Maintainer: PokeChain Team
+          Description: Pokemon search string generator
+           Genera cadenas de busqueda optimizadas de Pokemon
+           usando rankings de PvPoke y DialgaDex.
+          EOF
+
+          sudo apt-get install -y fakeroot
+          fakeroot bash -c "
+            chmod 755 \"$PACKAGE_DIR/DEBIAN\"
+            chmod 644 \"$PACKAGE_DIR/DEBIAN/control\"
+            chmod 755 \"$PACKAGE_DIR/usr\" \"$PACKAGE_DIR/usr/bin\" \"$PACKAGE_DIR/usr/share\" \
+                       \"$PACKAGE_DIR/usr/share/applications\" \"$PACKAGE_DIR/usr/share/icons\" \
+                       \"$PACKAGE_DIR/usr/share/icons/hicolor\" \
+                       \"$PACKAGE_DIR/usr/share/icons/hicolor/256x256\" \
+                       \"$PACKAGE_DIR/usr/share/icons/hicolor/256x256/apps\"
+            chmod 755 \"$PACKAGE_DIR/opt\" \"$PACKAGE_DIR/opt/$APP_NAME\" \"$PACKAGE_DIR/opt/$APP_NAME/$APP_NAME\"
+            find \"$PACKAGE_DIR/opt/$APP_NAME/_internal\" -type d -exec chmod 755 {} +
+            find \"$PACKAGE_DIR/opt/$APP_NAME/_internal\" '(' -name '*.so' -o -name '*.exe' ')' -exec chmod 755 {} +
+            find \"$PACKAGE_DIR/opt/$APP_NAME/_internal/ms-playwright" -type f -exec chmod 755 {} +
+            find \"$PACKAGE_DIR/opt/$APP_NAME/_internal/ms-playwright" -type d -exec chmod 755 {} +
+            dpkg-deb -Zxz --build \"$PACKAGE_DIR\" \"build/dist/${APP_NAME}_${APP_VERSION}_amd64.deb\"
+          "
+
+      - name: Upload .deb artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.APP_NAME }}_${{ env.APP_VERSION }}_linux_amd64
+          path: build/dist/*.deb
+
+  build-windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        id: playwright-cache
+        with:
+          path: ${{ env.PLAYWRIGHT_BROWSERS_PATH }}
+          key: playwright-win-${{ hashFiles('**/requirements.txt') }}
+
+      - name: Install Playwright Chromium
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: |
+          $env:PLAYWRIGHT_BROWSERS_PATH = "${{ env.PLAYWRIGHT_BROWSERS_PATH }}"
+          python -m playwright install chromium
+          python -m playwright install chromium-headless-shell
+
+      - name: Build executable
+        run: |
+          $Version = "${{ env.APP_VERSION }}"
+          $AppName = "${{ env.APP_NAME }}"
+          $PlaywrightCache = "${{ env.PLAYWRIGHT_BROWSERS_PATH }}"
+          $ProjectDir = "${{ github.workspace }}"
+
+          New-Item -ItemType Directory -Force -Path "build/dist", "build/work" | Out-Null
+
+          $pyArgs = @(
+            "--onedir",
+            "--name", $AppName,
+            "--distpath", "build/dist",
+            "--workpath", "build/work",
+            "--specpath", "build",
+            "--add-data", "$ProjectDir\icono.png;.",
+            "--hidden-import", "plyer.platforms.win.notification",
+            "--noconsole"
+          )
+
+          $browserDirs = Get-ChildItem "$PlaywrightCache\chromium-*" -Directory
+          foreach ($bd in $browserDirs) {
+            $rev = $bd.Name
+            Write-Host "  Adding: $rev"
+            $pyArgs += "--add-data"
+            $pyArgs += "$($bd.FullName);ms-playwright/$rev"
+          }
+
+          $headlessDirs = Get-ChildItem "$PlaywrightCache\chromium_headless_shell-*" -Directory
+          foreach ($bd in $headlessDirs) {
+            $rev = $bd.Name
+            Write-Host "  Adding: $rev"
+            $pyArgs += "--add-data"
+            $pyArgs += "$($bd.FullName);ms-playwright/$rev"
+          }
+
+          $ffmpegDirs = Get-ChildItem "$PlaywrightCache\ffmpeg-*" -Directory -ErrorAction SilentlyContinue
+          foreach ($bd in $ffmpegDirs) {
+            $rev = $bd.Name
+            Write-Host "  Adding: $rev"
+            $pyArgs += "--add-data"
+            $pyArgs += "$($bd.FullName);ms-playwright/$rev"
+          }
+
+          pyinstaller $pyArgs "pokechain.py"
+
+      - name: Package .zip
+        run: |
+          $AppName = "${{ env.APP_NAME }}"
+          $Version = "${{ env.APP_VERSION }}"
+          $ReleaseDir = "build\dist\$AppName"
+          $ArchiveFile = "build\dist\${AppName}_${Version}_win64.zip"
+
+          if (Test-Path $ArchiveFile) { Remove-Item -Force $ArchiveFile }
+          Compress-Archive -Path "$ReleaseDir\*" -DestinationPath $ArchiveFile
+
+          Get-Item $ArchiveFile | Select-Object Name, Length
+
+      - name: Upload .zip artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.APP_NAME }}_${{ env.APP_VERSION }}_win64
+          path: build/dist/*.zip

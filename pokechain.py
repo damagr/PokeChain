@@ -1,13 +1,20 @@
+import glob
 import io
 import json
+import os
 import re
+import sys
 import tkinter as tk
 from tkinter import messagebox, ttk
-import os
 import requests
 import PIL.Image
 import PIL.ImageDraw
 from playwright.sync_api import sync_playwright
+
+if getattr(sys, "frozen", False):
+    os.environ["PLAYWRIGHT_BROWSERS_PATH"] = os.path.join(
+        sys._MEIPASS, "ms-playwright"
+    )
 
 
 # ==========================================
@@ -1057,9 +1064,23 @@ class DialgadexTab(ttk.Frame):
         try:
             if self._playwright is None:
                 self._playwright = sync_playwright().start()
-            self._browser = self._playwright.chromium.launch(
-                headless=True, channel="chromium"
-            )
+
+            launch_kwargs = {"headless": True}
+
+            if getattr(sys, "frozen", False):
+                browsers_path = os.environ["PLAYWRIGHT_BROWSERS_PATH"]
+                chromium_dirs = sorted(
+                    glob.glob(os.path.join(browsers_path, "chromium-*"))
+                )
+                if chromium_dirs:
+                    chromium_dir = chromium_dirs[-1]
+                    launch_kwargs["executable_path"] = os.path.join(
+                        chromium_dir, "chrome-linux", "chrome"
+                    )
+            else:
+                launch_kwargs["channel"] = "chromium"
+
+            self._browser = self._playwright.chromium.launch(**launch_kwargs)
             self._pw_context = self._browser.new_context(
                 viewport={"width": 1280, "height": 720},
                 user_agent=(
