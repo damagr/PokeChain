@@ -87,10 +87,11 @@ jobs:
       - name: Set APP_VERSION_DEB
         id: version_deb
         run: |
-          if [[ "${{ env.APP_VERSION }}" =~ ^v ]]; then
-            echo "APP_VERSION_DEB=${{ env.APP_VERSION }}#v}" >> $GITHUB_OUTPUT
+          VERSION="${{ env.APP_VERSION }}"
+          if [[ "$VERSION" =~ ^v ]]; then
+            echo "APP_VERSION_DEB=${VERSION#v}" >> $GITHUB_OUTPUT
           else
-            echo "APP_VERSION_DEB=${{ env.APP_VERSION }}" >> $GITHUB_OUTPUT
+            echo "APP_VERSION_DEB=$VERSION" >> $GITHUB_OUTPUT
           fi
 
       - name: Package .deb
