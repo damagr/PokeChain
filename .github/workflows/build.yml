@@ -49,48 +49,55 @@ jobs:
 
       - name: Build executable
         run: |
-          mkdir -p build/dist build/package
-          pyinstaller \
-            --onedir \
-            --name "$APP_NAME" \
-            --distpath build/dist \
-            --workpath build/work \
-            --specpath build \
-            --add-data "${{ github.workspace }}/icono.png:." \
-            --hidden-import plyer.platforms.linux.notification \
-            --add-data "$PLAYWRIGHT_BROWSERS_PATH/chromium-*:ms-playwright/" \
-            --add-data "$PLAYWRIGHT_BROWSERS_PATH/chromium_headless_shell-*:ms-playwright/" \
-            --add-data "$PLAYWRIGHT_BROWSERS_PATH/ffmpeg-*:ms-playwright/" \
-            pokechain.py
+          mkdir -p build/dist build/work
+          PYINSTALLER_ARGS=(
+            --onedir
+            --name "$APP_NAME"
+            --distpath build/dist
+            --workpath build/work
+            --specpath build
+            --add-data "${{ github.workspace }}/icono.png:."
+            --hidden-import plyer.platforms.linux.notification
+          )
+          for dir in "$PLAYWRIGHT_BROWSERS_PATH"/chromium-*/; do
+            rev=$(basename "$dir")
+            PYINSTALLER_ARGS+=(--add-data "$dir:ms-playwright/$rev")
+          done
+          for dir in "$PLAYWRIGHT_BROWSERS_PATH"/chromium_headless_shell-*/; do
+            rev=$(basename "$dir")
+            PYINSTALLER_ARGS+=(--add-data "$dir:ms-playwright/$rev")
+          done
+          for dir in "$PLAYWRIGHT_BROWSERS_PATH"/ffmpeg-*/; do
+            rev=$(basename "$dir")
+            PYINSTALLER_ARGS+=(--add-data "$dir:ms-playwright/$rev")
+          done
+          pyinstaller "${PYINSTALLER_ARGS[@]}" pokechain.py
 
       - name: Package .deb
         run: |
+          sudo apt-get install -y fakeroot
           PACKAGE_DIR="build/package"
           mkdir -p "$PACKAGE_DIR/DEBIAN"
           mkdir -p "$PACKAGE_DIR/usr/bin"
           mkdir -p "$PACKAGE_DIR/usr/share/applications"
           mkdir -p "$PACKAGE_DIR/usr/share/icons/hicolor/256x256/apps"
           mkdir -p "$PACKAGE_DIR/opt/$APP_NAME"
-
           cp -a "build/dist/$APP_NAME"/* "$PACKAGE_DIR/opt/$APP_NAME/"
           ln -sf "/opt/$APP_NAME/$APP_NAME" "$PACKAGE_DIR/usr/bin/$APP_NAME"
           cp build/$APP_NAME.desktop "$PACKAGE_DIR/usr/share/applications/"
           cp icono.png "$PACKAGE_DIR/usr/share/icons/hicolor/256x256/apps/$APP_NAME.png"
-
-          cat > "$PACKAGE_DIR/DEBIAN/control" <<EOF
-          Package: $APP_NAME
-          Version: ${{ env.APP_VERSION }}
-          Section: games
-          Priority: optional
-          Architecture: amd64
-          Depends: python3 (>= 3.10), libnotify-bin
-          Maintainer: PokeChain Team
-          Description: Pokemon search string generator
-           Genera cadenas de busqueda optimizadas de Pokemon
-           usando rankings de PvPoke y DialgaDex.
-          EOF
-
-          sudo apt-get install -y fakeroot
+          printf '%s\n' \
+            "Package: $APP_NAME" \
+            "Version: ${{ env.APP_VERSION }}" \
+            "Section: games" \
+            "Priority: optional" \
+            "Architecture: amd64" \
+            "Depends: python3 (>= 3.10), libnotify-bin" \
+            "Maintainer: PokeChain Team" \
+            "Description: Pokemon search string generator" \
+            " Genera cadenas de busqueda optimizadas de Pokemon" \
+            " usando rankings de PvPoke y DialgaDex." \
+            > "$PACKAGE_DIR/DEBIAN/control"
           fakeroot bash -c "
             chmod 755 \"$PACKAGE_DIR/DEBIAN\"
             chmod 644 \"$PACKAGE_DIR/DEBIAN/control\"
@@ -101,9 +108,9 @@ jobs:
                        \"$PACKAGE_DIR/usr/share/icons/hicolor/256x256/apps\"
             chmod 755 \"$PACKAGE_DIR/opt\" \"$PACKAGE_DIR/opt/$APP_NAME\" \"$PACKAGE_DIR/opt/$APP_NAME/$APP_NAME\"
             find \"$PACKAGE_DIR/opt/$APP_NAME/_internal\" -type d -exec chmod 755 {} +
-            find \"$PACKAGE_DIR/opt/$APP_NAME/_internal\" '(' -name '*.so' -o -name '*.exe' ')' -exec chmod 755 {} +
-            find \"$PACKAGE_DIR/opt/$APP_NAME/_internal/ms-playwright" -type f -exec chmod 755 {} +
-            find \"$PACKAGE_DIR/opt/$APP_NAME/_internal/ms-playwright" -type d -exec chmod 755 {} +
+            find \"$PACKAGE_DIR/opt/$APP_NAME/_internal\" -name '*.so' -exec chmod 755 {} +
+            find \"$PACKAGE_DIR/opt/$APP_NAME/_internal/ms-playwright\" -type f -exec chmod 755 {} +
+            find \"$PACKAGE_DIR/opt/$APP_NAME/_internal/ms-playwright\" -type d -exec chmod 755 {} +
             dpkg-deb -Zxz --build \"$PACKAGE_DIR\" \"build/dist/${APP_NAME}_${APP_VERSION}_amd64.deb\"
           "
 
@@ -149,13 +156,10 @@ jobs:
 
       - name: Build executable
         run: |
-          $Version = "${{ env.APP_VERSION }}"
           $AppName = "${{ env.APP_NAME }}"
           $PlaywrightCache = "${{ env.PLAYWRIGHT_BROWSERS_PATH }}"
           $ProjectDir = "${{ github.workspace }}"
-
           New-Item -ItemType Directory -Force -Path "build/dist", "build/work" | Out-Null
-
           $pyArgs = @(
             "--onedir",
             "--name", $AppName,
@@ -166,31 +170,15 @@ jobs:
             "--hidden-import", "plyer.platforms.win.notification",
             "--noconsole"
           )
-
-          $browserDirs = Get-ChildItem "$PlaywrightCache\chromium-*" -Directory
-          foreach ($bd in $browserDirs) {
-            $rev = $bd.Name
-            Write-Host "  Adding: $rev"
-            $pyArgs += "--add-data"
-            $pyArgs += "$($bd.FullName);ms-playwright/$rev"
+          foreach ($pat in @("chromium-*", "chromium_headless_shell-*", "ffmpeg-*")) {
+            $dirs = Get-ChildItem "$PlaywrightCache\$pat" -Directory -ErrorAction SilentlyContinue
+            foreach ($bd in $dirs) {
+              $rev = $bd.Name
+              Write-Host "  Adding: $rev"
+              $pyArgs += "--add-data"
+              $pyArgs += "$($bd.FullName);ms-playwright/$rev"
+            }
           }
-
-          $headlessDirs = Get-ChildItem "$PlaywrightCache\chromium_headless_shell-*" -Directory
-          foreach ($bd in $headlessDirs) {
-            $rev = $bd.Name
-            Write-Host "  Adding: $rev"
-            $pyArgs += "--add-data"
-            $pyArgs += "$($bd.FullName);ms-playwright/$rev"
-          }
-
-          $ffmpegDirs = Get-ChildItem "$PlaywrightCache\ffmpeg-*" -Directory -ErrorAction SilentlyContinue
-          foreach ($bd in $ffmpegDirs) {
-            $rev = $bd.Name
-            Write-Host "  Adding: $rev"
-            $pyArgs += "--add-data"
-            $pyArgs += "$($bd.FullName);ms-playwright/$rev"
-          }
-
           pyinstaller $pyArgs "pokechain.py"
 
       - name: Package .zip
@@ -199,10 +187,8 @@ jobs:
           $Version = "${{ env.APP_VERSION }}"
           $ReleaseDir = "build\dist\$AppName"
           $ArchiveFile = "build\dist\${AppName}_${Version}_win64.zip"
-
           if (Test-Path $ArchiveFile) { Remove-Item -Force $ArchiveFile }
           Compress-Archive -Path "$ReleaseDir\*" -DestinationPath $ArchiveFile
-
           Get-Item $ArchiveFile | Select-Object Name, Length
 
       - name: Upload .zip artifact
