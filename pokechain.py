@@ -749,7 +749,7 @@ class PvPokeTab(ttk.Frame):
         oscuro = self.var_oscuro.get()
         xl = self.var_xl.get()
 
-        filtrados = self._filtrar_pvpoke(gamemaster, rankings, liga, mt_elite, oscuro, xl)
+        filtrados = self._filtrar_pvpoke(gamemaster, rankings, liga, mt_elite, xl)
 
         if not filtrados or self._cancelled:
             self._restaurar_botones_pvp()
@@ -764,6 +764,10 @@ class PvPokeTab(ttk.Frame):
         cantidad = min(cantidad, len(filtrados))
 
         top = filtrados[:cantidad]
+        if oscuro:
+            top = [p for p in top if "(Shadow)" in p["speciesName"] or "shadow" in p["speciesName"].lower()]
+        else:
+            top = [p for p in top if not ("(Shadow)" in p["speciesName"] or "shadow" in p["speciesName"].lower())]
         total = len(top)
         self._cache_ids = set()
         self._current_liga = liga
@@ -796,7 +800,7 @@ class PvPokeTab(ttk.Frame):
         self.btn_ultra.config(state=tk.NORMAL, text="Ultra League")
         self.btn_master.config(state=tk.NORMAL, text="Master League")
 
-    def _filtrar_pvpoke(self, gamemaster, rankings, liga, mt_elite, oscuro, xl):
+    def _filtrar_pvpoke(self, gamemaster, rankings, liga, mt_elite, xl):
         cp_cap = PVPOKE_CP_CAPS.get(liga, 1500)
         gm_by_name = {}
         for p in gamemaster.get("pokemon", []):
@@ -805,13 +809,10 @@ class PvPokeTab(ttk.Frame):
         resultado = []
         for r in rankings:
             nombre = r["speciesName"]
-            es_shadow = "(Shadow)" in nombre or "shadow" in nombre.lower()
             nombre_limpio = re.sub(r"\s*\(Shadow\)", "", nombre).strip()
             gm = gm_by_name.get(nombre_limpio) or gm_by_name.get(
                 nombre.lower().replace(" ", "_").replace(" (shadow)", "")
             )
-            if es_shadow and not oscuro:
-                continue
             if not mt_elite and gm:
                 elite_moves = set(gm.get("eliteMoves", []))
                 moveset = set(r.get("moveset", []))
@@ -1000,9 +1001,8 @@ class DialgadexTab(ttk.Frame):
         self.output.set_text(resultado)
         self.output.set_state(tk.DISABLED)
 
-    def _filtrar_rankings(self, rankings, raw_data, inedito, mega, oscuro, legendario):
-        """Filtra los rankings scrapeados según los toggles del usuario."""
-        # Construir lookup de released desde raw_data
+    def _filtrar_rankings(self, rankings, raw_data, inedito, mega, legendario):
+        """Filtra los rankings scrapeados según los toggles del usuario (excluyendo Oscuro que se aplica después del límite)."""
         released_lookup = {}
         for p in raw_data:
             key = (int(p["id"]), p.get("form", "Normal"), p.get("shadow", False))
@@ -1016,13 +1016,10 @@ class DialgadexTab(ttk.Frame):
 
             es_normal = (
                 p.get("class") is None
-                and not p.get("shadow", False)
                 and p.get("form", "Normal") == "Normal"
                 and es_lanzado
             )
             if es_normal:
-                incluir = True
-            if oscuro and p.get("shadow", False):
                 incluir = True
             if legendario and p.get("class") in (
                 "POKEMON_CLASS_LEGENDARY",
@@ -1228,12 +1225,15 @@ class DialgadexTab(ttk.Frame):
             oscuro = self.var_oscuro.get()
             legendario = self.var_legendario.get()
 
-            if not (inedito or mega or oscuro or legendario):
-                messagebox.showwarning("Aviso", "Activa al menos un filtro.")
+            if not (inedito or mega or legendario):
+                messagebox.showwarning(
+                    "Aviso",
+                    "Activa al menos un filtro: Inedito, Mega/Primigenio, o Legendario."
+                )
                 return
 
             filtrados = self._filtrar_rankings(
-                rankings, raw_data, inedito, mega, oscuro, legendario
+                rankings, raw_data, inedito, mega, legendario
             )
 
             if not filtrados or self._cancelled:
@@ -1246,7 +1246,15 @@ class DialgadexTab(ttk.Frame):
                 cantidad = len(filtrados)
             cantidad = min(cantidad, len(filtrados))
 
-            self._generar_cadena(filtrados, cantidad)
+            top = filtrados[:cantidad]
+            if oscuro:
+                top = [p for p in top if p.get("shadow", False)]
+            else:
+                top = [p for p in top if not p.get("shadow", False)]
+            if not top:
+                self.status_bar.clear()
+                return
+            self._generar_cadena(top, len(top))
         finally:
             self._running = False
             self.btn_obtener.config(state=tk.NORMAL, text="Obtener Lista")
