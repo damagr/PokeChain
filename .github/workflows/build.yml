@@ -76,43 +76,8 @@ jobs:
       - name: Package .deb
         run: |
           sudo apt-get install -y fakeroot
-          PACKAGE_DIR="build/package"
-          mkdir -p "$PACKAGE_DIR/DEBIAN"
-          mkdir -p "$PACKAGE_DIR/usr/bin"
-          mkdir -p "$PACKAGE_DIR/usr/share/applications"
-          mkdir -p "$PACKAGE_DIR/usr/share/icons/hicolor/256x256/apps"
-          mkdir -p "$PACKAGE_DIR/opt/$APP_NAME"
-          cp -a "build/dist/$APP_NAME"/* "$PACKAGE_DIR/opt/$APP_NAME/"
-          ln -sf "/opt/$APP_NAME/$APP_NAME" "$PACKAGE_DIR/usr/bin/$APP_NAME"
-          cp build/$APP_NAME.desktop "$PACKAGE_DIR/usr/share/applications/"
-          cp icono.png "$PACKAGE_DIR/usr/share/icons/hicolor/256x256/apps/$APP_NAME.png"
-          printf '%s\n' \
-            "Package: $APP_NAME" \
-            "Version: ${{ env.APP_VERSION }}" \
-            "Section: games" \
-            "Priority: optional" \
-            "Architecture: amd64" \
-            "Depends: python3 (>= 3.10), libnotify-bin" \
-            "Maintainer: PokeChain Team" \
-            "Description: Pokemon search string generator" \
-            " Genera cadenas de busqueda optimizadas de Pokemon" \
-            " usando rankings de PvPoke y DialgaDex." \
-            > "$PACKAGE_DIR/DEBIAN/control"
-          fakeroot bash -c "
-            chmod 755 \"$PACKAGE_DIR/DEBIAN\"
-            chmod 644 \"$PACKAGE_DIR/DEBIAN/control\"
-            chmod 755 \"$PACKAGE_DIR/usr\" \"$PACKAGE_DIR/usr/bin\" \"$PACKAGE_DIR/usr/share\" \
-                       \"$PACKAGE_DIR/usr/share/applications\" \"$PACKAGE_DIR/usr/share/icons\" \
-                       \"$PACKAGE_DIR/usr/share/icons/hicolor\" \
-                       \"$PACKAGE_DIR/usr/share/icons/hicolor/256x256\" \
-                       \"$PACKAGE_DIR/usr/share/icons/hicolor/256x256/apps\"
-            chmod 755 \"$PACKAGE_DIR/opt\" \"$PACKAGE_DIR/opt/$APP_NAME\" \"$PACKAGE_DIR/opt/$APP_NAME/$APP_NAME\"
-            find \"$PACKAGE_DIR/opt/$APP_NAME/_internal\" -type d -exec chmod 755 {} +
-            find \"$PACKAGE_DIR/opt/$APP_NAME/_internal\" -name '*.so' -exec chmod 755 {} +
-            find \"$PACKAGE_DIR/opt/$APP_NAME/_internal/ms-playwright\" -type f -exec chmod 755 {} +
-            find \"$PACKAGE_DIR/opt/$APP_NAME/_internal/ms-playwright\" -type d -exec chmod 755 {} +
-            dpkg-deb -Zxz --build \"$PACKAGE_DIR\" \"build/dist/${APP_NAME}_${APP_VERSION}_amd64.deb\"
-          "
+          fakeroot bash build/package-deb.sh \
+            "build/dist" "$APP_NAME" "${{ env.APP_VERSION }}"
 
       - name: Upload .deb artifact
         uses: actions/upload-artifact@v4
