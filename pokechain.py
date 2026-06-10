@@ -861,7 +861,7 @@ class DialgadexTab(ttk.Frame):
         frame_filtros.rowconfigure(1, weight=1)
 
         self.var_inedito = tk.BooleanVar(value=False)
-        self.var_mega = tk.BooleanVar(value=False)
+        self.var_mega = tk.BooleanVar(value=True)
         self.var_oscuro = tk.BooleanVar(value=True)
         self.var_legendario = tk.BooleanVar(value=True)
 
@@ -999,8 +999,6 @@ class DialgadexTab(ttk.Frame):
         return resultado
 
     def _generar_cadena(self, lista_pokemon, cantidad):
-        self._cancelled = False
-        self.btn_obtener.config(text="Cancelar")
         self.status_bar.set_message("Generando cadena de busqueda...", 0)
         self.update()
 
@@ -1024,60 +1022,54 @@ class DialgadexTab(ttk.Frame):
             self.status_bar.set_message(f"Procesando {i+1}/{total} ({pct}%)", pct)
             self.update()
 
-        if self._cancelled:
-            self.btn_obtener.config(state=tk.NORMAL, text="Obtener Lista")
-            self.status_bar.set_message("Cancelado", 0)
-        else:
+        if not self._cancelled:
             self._regenerar()
-            self.btn_obtener.config(state=tk.NORMAL, text="Obtener Lista")
             self.status_bar.set_message(f"Completado: {total} Pokemon procesados", 100)
 
     def _obtener_lista_atacantes(self):
-        if hasattr(self, '_cancelled') and not self._cancelled:
+        if hasattr(self, '_running') and self._running:
             self._cancelled = True
-            self.btn_obtener.config(text="Obtener Lista")
-            self.status_bar.set_message("Cancelado", 0)
             return
 
+        self._running = True
         self._cancelled = False
         self.btn_obtener.config(text="Cancelar")
         self.status_bar.set_message("Descargando datos de DialgaDex...", 0)
         self.update()
 
-        datos = self.api.descargar_dialgadex()
-        if not datos or self._cancelled:
+        try:
+            datos = self.api.descargar_dialgadex()
+            if not datos or self._cancelled:
+                return
+
+            inedito = self.var_inedito.get()
+            mega = self.var_mega.get()
+            oscuro = self.var_oscuro.get()
+            legendario = self.var_legendario.get()
+
+            if not (inedito or mega or oscuro or legendario):
+                messagebox.showwarning("Aviso", "Activa al menos un filtro.")
+                return
+
+            filtrados = self._filtrar_atacantes(datos, inedito, mega, oscuro, legendario)
+
+            if not filtrados or self._cancelled:
+                return
+
+            texto_cant = self.txt_cantidad.get().strip()
+            if texto_cant.isdigit() and int(texto_cant) > 0:
+                cantidad = int(texto_cant)
+            else:
+                cantidad = len(filtrados)
+            cantidad = min(cantidad, len(filtrados))
+
+            self._generar_cadena(filtrados, cantidad)
+        finally:
+            self._running = False
             self.btn_obtener.config(state=tk.NORMAL, text="Obtener Lista")
-            self.status_bar.clear()
-            return
-
-        inedito = self.var_inedito.get()
-        mega = self.var_mega.get()
-        oscuro = self.var_oscuro.get()
-        legendario = self.var_legendario.get()
-
-        if not (inedito or mega or oscuro or legendario):
-            messagebox.showwarning("Aviso", "Activa al menos un filtro.")
-            self.btn_obtener.config(state=tk.NORMAL, text="Obtener Lista")
-            self.status_bar.clear()
-            return
-
-        filtrados = self._filtrar_atacantes(datos, inedito, mega, oscuro, legendario)
-
-        if not filtrados or self._cancelled:
-            self.btn_obtener.config(state=tk.NORMAL, text="Obtener Lista")
-            self.status_bar.clear()
-            return
-
-        texto_cant = self.txt_cantidad.get().strip()
-        if texto_cant.isdigit() and int(texto_cant) > 0:
-            cantidad = int(texto_cant)
-        else:
-            cantidad = len(filtrados)
-        cantidad = min(cantidad, len(filtrados))
-
-        self._generar_cadena(filtrados, cantidad)
-
-        self._generar_cadena(filtrados, cantidad)
+            if self._cancelled:
+                self.status_bar.set_message("Cancelado", 0)
+            self._cancelled = False
 
     def _copiar(self):
         contenido = self.output.get_text().strip()
