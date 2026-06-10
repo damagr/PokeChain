@@ -76,10 +76,16 @@ jobs:
       - name: Package .deb
         run: |
           set -x
-          sudo apt-get install -y fakeroot
-          fakeroot bash .github/scripts/package-deb.sh \
+          # Verificar que el script existe
+          ls -la .github/scripts/package-deb.sh
+          # Ejecutar sin fakeroot (en CI Ubuntu no hace falta)
+          bash .github/scripts/package-deb.sh \
             "build/dist" "$APP_NAME" "${{ env.APP_VERSION }}"
+          # Verificar que se creó el .deb
+          echo "--- Contenido de build/dist/ ---"
           ls -la build/dist/
+          # Verificar que el .deb existe
+          test -f build/dist/pokechain_0.0.0_amd64.deb && echo "DEB creado OK" || { echo "ERROR: .deb no encontrado"; exit 1; }
 
       - name: Upload .deb artifact
         uses: actions/upload-artifact@v4
