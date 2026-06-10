@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # package-deb.sh — Empaqueta el output de PyInstaller como .deb
 # Uso: bash package-deb.sh <dist_dir> <app_name> <version>
+# Ejecutar desde la raíz del repo.
 
 set -euo pipefail
 
@@ -20,11 +21,20 @@ mkdir -p "$PACKAGE_DIR/opt/$APP_NAME"
 cp -a "$DIST_DIR/$APP_NAME"/* "$PACKAGE_DIR/opt/$APP_NAME/"
 ln -sf "/opt/$APP_NAME/$APP_NAME" "$PACKAGE_DIR/usr/bin/$APP_NAME"
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
+# Buscar .desktop e icono relativos a la raíz del repo
+FOR_DESKTOP=".github/scripts/$APP_NAME.desktop"
+FOR_ICON="icono.png"
 
-cp "$SCRIPT_DIR/$APP_NAME.desktop" "$PACKAGE_DIR/usr/share/applications/"
-cp "$PROJECT_DIR/icono.png" "$PACKAGE_DIR/usr/share/icons/hicolor/256x256/apps/$APP_NAME.png"
+if [ ! -f "$FOR_DESKTOP" ]; then
+    FOR_DESKTOP="build/$APP_NAME.desktop"
+fi
+if [ ! -f "$FOR_DESKTOP" ]; then
+    echo "ERROR: $APP_NAME.desktop not found"
+    exit 1
+fi
+
+cp "$FOR_DESKTOP" "$PACKAGE_DIR/usr/share/applications/"
+cp "$FOR_ICON" "$PACKAGE_DIR/usr/share/icons/hicolor/256x256/apps/$APP_NAME.png"
 
 # Control file
 cat > "$PACKAGE_DIR/DEBIAN/control" <<EOF

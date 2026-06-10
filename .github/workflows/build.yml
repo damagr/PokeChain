@@ -75,9 +75,11 @@ jobs:
 
       - name: Package .deb
         run: |
+          set -x
           sudo apt-get install -y fakeroot
           fakeroot bash .github/scripts/package-deb.sh \
             "build/dist" "$APP_NAME" "${{ env.APP_VERSION }}"
+          ls -la build/dist/
 
       - name: Upload .deb artifact
         uses: actions/upload-artifact@v4

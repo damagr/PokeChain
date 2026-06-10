@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=PokeChain
+Comment=Generador de cadenas de busqueda de Pokemon
+Exec=/usr/bin/pokechain
+Icon=pokechain
+Terminal=false
+Type=Application
+Categories=Game;Utility;
