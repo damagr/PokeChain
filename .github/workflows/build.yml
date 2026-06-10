@@ -84,8 +84,8 @@ jobs:
           # Verificar que se creó el .deb
           echo "--- Contenido de build/dist/ ---"
           ls -la build/dist/
-          # Verificar que el .deb existe
-          test -f build/dist/pokechain_0.0.0_amd64.deb && echo "DEB creado OK" || { echo "ERROR: .deb no encontrado"; exit 1; }
+          # Verificar que el .deb existe (usando la versión real)
+          test -f "build/dist/pokechain_${{ env.APP_VERSION }}_amd64.deb" && echo "DEB creado OK" || { echo "ERROR: .deb no encontrado"; exit 1; }
 
       - name: Upload .deb artifact
         uses: actions/upload-artifact@v4
@@ -169,3 +169,37 @@ jobs:
         with:
           name: ${{ env.APP_NAME }}_${{ env.APP_VERSION }}_win64
           path: build/dist/*.zip
+
+  publish:
+    needs: [build-linux, build-windows]
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download Linux artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ env.APP_NAME }}_${{ env.APP_VERSION }}_linux_amd64
+          path: artifacts/linux
+
+      - name: Download Windows artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ env.APP_NAME }}_${{ env.APP_VERSION }}_win64
+          path: artifacts/win
+
+      - name: List artifacts
+        run: |
+          echo "=== Linux ==="
+          ls -la artifacts/linux/
+          echo "=== Windows ==="
+          ls -la artifacts/win/
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            artifacts/linux/*.deb
+            artifacts/win/*.zip
+          generate_release_notes: true
