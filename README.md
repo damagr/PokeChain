@@ -1,133 +1,177 @@
-Aquí tienes el archivo `README.md` completamente actualizado para reflejar todas las nuevas funciones, la división por pestañas, el procesamiento avanzado de cadenas y la integración de la API en ambas herramientas.
+# PokeChain
+
+Herramienta de escritorio con GUI para generar cadenas de búsqueda optimizadas de Pokémon, usando rankings reales de PvPoke y DialgaDex.
 
 ---
 
-# 🔍 PokeChain
+## Características
 
-**PokeChain** es una herramienta de escritorio con interfaz gráfica (GUI) diseñada para automatizar, limpiar y optimizar cadenas de búsqueda de Pokémon. Utiliza la [PokéAPI](https://pokeapi.co/) para rastrear líneas evolutivas y consolidar filtros avanzados compatibles con juegos y bases de datos externas.
+La app tiene dos módulos en pestañas separadas:
 
----
+### 1. PvPoke Tab (PvP)
 
-## 🚀 Características Principales
+Descarga rankings de PvPoke para **Great League**, **Ultra League** y **Master League**, los filtra y genera una cadena de búsqueda optimizada con IDs de formas base.
 
-La aplicación se divide en dos módulos especializados accesibles mediante pestañas:
+- Rankings desde la API oficial de PvPoke
+- Filtros: oscuros, movimientos élite, XL
+- Prefijos de filtrado por CP y estadísticas según la liga
+- Resolución de anteevoluciones vía PokéAPI (recorre `evolves_from_species`)
 
-### 1. Buscador de Anteevoluciones (Pestaña 1)
+### 2. DialgaDex Tab (Atacantes)
 
-Convierte un listado de nombres de Pokémon en una cadena optimizada de IDs de sus formas base.
+Scrapea rankings de atacantes desde [dialgadex.com](https://dialgadex.com) usando **Playwright**, los filtra según filtros del usuario y genera una cadena de búsqueda.
 
-* **Rastreo Evolutivo:** Consulta la API en tiempo real para encontrar la preevolución inicial de cualquier Pokémon introducido.
-* **Detección de Estado:** Identifica automáticamente si el Pokémon es *Shadow* u *Oscuro* y le añade el prefijo correspondiente.
-* **Filtros de Liga Ajustables:** Permite añadir instantáneamente prefijos de filtrado de estadísticas para ligas específicas (*Great League* y *Ultra League*) con un solo clic.
-
-### 2. Dialgadex Helper (Pestaña 2)
-
-Parsea, sanea y traduce cadenas de búsqueda complejas ya existentes, aplicando también el filtro de anteevoluciones a los IDs numéricos.
-
-* **Limpieza de Modificadores Mega:** Remueve de forma inteligente etiquetas como `mega`, `mega1-` o residuos de conectores `&`.
-* **Filtro de Exclusión:** Descarta por completo bloques que contengan la palabra `investigación` y elimina términos huérfanos sueltos (como palabras `Oscuro` o `Shadow` sin ID asociado).
-* **Traducción Dinámica:** Traduce automáticamente todos los tipos elementales (ej: *Fuego* ↔ *Fire*) y estados según el idioma seleccionado en la interfaz.
-* **Conversión de IDs Existentes:** Toma los IDs numéricos o combinados de la cadena (ej: `26` o `Oscuro&26`) y los reemplaza por el ID de su anteevolución base (`+172` o `Oscuro&+172`), ordenando numéricamente todo el conjunto final.
-* **Prefijo Automatizado:** Añade al inicio de la cadena resultante el filtro de calidad predeterminado (`4*;3*;3-ataque&!#&`).
+- Scraping con Playwright (Chromium headless)
+- Filtros aditivos: Inédito, Oscuro, Mega/Primal, Legendario
+- Resolución de anteevoluciones vía PokéAPI (recorre `evolves_from_species`)
+- Datos crudos de [pogo_pkm.min.json](https://raw.githubusercontent.com/mgrann03/pokemon-resources/main/pogo_pkm.min.json) para determinar si un Pokémon está liberado
 
 ---
 
-## 🛠️ Instalación
+## Instalación
 
 ### Windows
 
-1. **Instalar Python:** Descárgalo desde [python.org](https://www.python.org/downloads/). Durante la instalación, asegúrate de marcar la casilla **"Add Python to PATH"**.
-2. **Instalar Dependencias:** Abre la terminal (`cmd`) y ejecuta:
-```cmd
-pip install requests
-
-```
-
-
-3. **Ejecutar:** Haz doble clic sobre el archivo `pokechain.py` o ejecútalo desde la terminal:
-```cmd
-python pokechain.py
-
-```
-
-
+1. **Instalar Python 3** desde [python.org](https://www.python.org/downloads/). Marca **"Add Python to PATH"**.
+2. **Instalar dependencias:**
+   ```cmd
+   pip install requests plyer
+   pip install playwright
+   python -m playwright install chromium
+   ```
+3. **Ejecutar:**
+   ```cmd
+   python pokechain.py
+   ```
 
 ### Linux (Ubuntu / Debian / Fedora / Arch)
 
-1. **Instalar Python y Tkinter:**
-```bash
-# Ubuntu / Debian
-sudo apt install python3 python3-tk python3-pip
+1. **Python y Tkinter:**
+   ```bash
+   # Ubuntu / Debian
+   sudo apt install python3 python3-tk python3-pip
 
-# Fedora
-sudo dnf install python3 python3-tkinter
+   # Fedora
+   sudo dnf install python3 python3-tkinter
 
-# Arch
-sudo pacman -S python tk
+   # Arch
+   sudo pacman -S python tk
+   ```
 
-```
-
-
-2. **Instalar Dependencias:**
-```bash
-pip3 install requests
-
-```
-
+2. **Dependencias:**
+   ```bash
+   pip3 install requests plyer
+   pip3 install playwright
+   python3 -m playwright install chromium
+   ```
 
 3. **Ejecutar:**
-```bash
-python3 pokechain.py
-
-```
-
-
+   ```bash
+   python3 pokechain.py
+   ```
 
 ---
 
-## 📊 Formatos de Entrada y Transformaciones
+## Uso
 
-### Módulo 1 (Búsqueda por nombres)
+### PvPoke Tab
+1. Seleccioná una liga (Great/Ultra/Master)
+2. Activá los filtros deseados (oscuridad, MT élite, XL)
+3. Ingresá la cantidad de Pokémon a incluir
+4. Click en **Obtener Lista**
+5. La cadena generada se copia al portapapeles
 
-| Entrada (Línea por línea) | Resultado Producido | Nota |
-| --- | --- | --- |
-| `Charizard` | `+4;` | Encuentra a Charmander (ID 4) |
-| `Mewtwo (Shadow)` | `Shadow&+150;` | Mantiene el estado en inglés |
-| `Mewtwo (Oscuro)` | `Oscuro&+150;` | Mantiene el estado en español |
-
-### Módulo 2 (Dialgadex Helper - Cadena Completa)
-
-| Cadena de Entrada de Ejemplo | Salida Procesada (Idioma: Español) |
-| --- | --- |
-| `mega2-&fuego,investigación;26;Oscuro&643` | `4*;3*;3-ataque&!#&Fuego;+172;Oscuro&+643;` |
-
-*El sistema elimina los residuos "mega", descarta el bloque de "investigación", traduce "fuego" a formato correcto, y convierte el ID `26` (Raichu) en `+172` (Pichu).*
+### DialgaDex Tab
+1. Activá los filtros deseados (Inédito, Oscuro, Mega/Primal, Legendario)
+2. Ingresá la cantidad de Pokémon a incluir
+3. Click en **Obtener Lista** (abre Chromium headless, descarga rankings, aplica filtros)
+4. La cadena generada se copia al portapapeles
 
 ---
 
-## 🗂️ Estructura del Código
+## APIs y Fuentes de Datos
+
+| Fuente | Uso | Endpoint |
+|---|---|---|
+| [dialgadex.com](https://dialgadex.com) | Rankings de atacantes (eDPS) | Scraping con Playwright |
+| [PvPoke](https://pvpoke.com) | Rankings PvP por liga | `https://pvpoke.com/data/rankings/` |
+| [PokéAPI](https://pokeapi.co) | Resolución de anteevoluciones | `https://pokeapi.co/api/v2/pokemon-species/` |
+| [pokemon-resources](https://raw.githubusercontent.com/mgrann03/pokemon-resources/main/pogo_pkm.min.json) | Datos crudos de Pokémon GO (released, tipos) | GitHub raw |
+
+---
+
+## Estructura del Código
 
 ```
 pokechain.py
+├── Funciones compartidas
+│   ├── limpiar_nombre_especie()   # Remueve prefijos Mega/Shadow y sufijos X/Y/Z
+│   ├── analizar_nombre()          # Separa nombre de modificadores (Shadow/Oscuro)
+│   ├── criterio_ordenacion()      # Ordena IDs numéricamente
+│   └── get_prefijo_shadow()       # Prefijo según idioma
 │
-├── Lógica Compartida
-│   ├── obtener_id_anteevolucion_puro() # Conexión iterativa con PokéAPI
-│   └── criterio_ordenacion()          # Extractor de secuencias numéricas para ordenación
+├── ApiCache
+│   ├── consulta_api()             # GET con caché (PokéAPI)
+│   ├── descargar_dialgadex()      # JSON de pokemon-resources
+│   ├── descargar_gamemaster()     # GameMaster de PvPoke
+│   ├── descargar_rankings()       # Rankings de PvPoke
+│   └── buscar_anteevolucion()     # Recorre evolves_from_species
 │
-├── Módulo Pestaña 1
-│   ├── analizar_nombre()              # Separa texto limpio de modificadores
-│   ├── obtener_anteevolucion_id()     # Genera el token final formateado
-│   └── aplicar_liga()                 # Inserción de cadenas de filtrado estático
+├── PvPokeTab
+│   ├── _obtener_lista_pvp()       # Obtiene rankings PvP, filtra, genera cadena
+│   ├── _filtrar_pvpoke()          # Filtra por oscuro, MT élite, XL
+│   ├── _obtener_id_raw()          # Resuelve anteevolución + raw ID
+│   └── _regenerar()               # Construye cadena de búsqueda final
 │
-└── Módulo Pestaña 2
-    ├── parsear_cadena_existente()     # Limpieza, traducción y conversión de IDs
-    └── procesar_concatenar()          # Formateo final con cabecera fija
-
+├── DialgadexTab
+│   ├── _get_browser()             # Lanza Chromium headless (Playwright)
+│   ├── _scrape_rankings()         # Scrapea dialgadex.com, ejecuta LoadStrongest
+│   ├── _filtrar_rankings()        # Filtra según toggles del usuario
+│   ├── _generar_cadena()          # Resuelve anteevoluciones, genera cadena
+│   └── _cleanup_playwright()      # Limpia recursos del navegador
+│
+└── PokeChainApp
+    ├── _create_notebook()         # Pestañas PvP + DialgaDex
+    ├── _create_header()           # Logo + selector de idioma
+    ├── _create_menu()             # Menú Archivo + Tema
+    └── _on_close()                # Cleanup de Playwright al cerrar
 ```
 
 ---
 
-## 📝 Notas de Uso
+## Ejemplos
 
-* **Consumo de API:** Las consultas se realizan bajo demanda a los servidores de PokéAPI. Al procesar listas muy extensas o cadenas con decenas de IDs, el programa puede tardar unos segundos en responder mientras asegura los datos de origen.
-* **Persistencia del Idioma:** Cambiar el selector de idioma en cualquiera de las dos pestañas actualiza de forma global las preferencias de traducción y nomenclatura para todo el entorno de trabajo.
+### PvPoke Tab — Great League
+
+Entrada: top 10 de Great League con filtro oscuro activado
+
+Salida: cadena con IDs base ordenados + prefijo `cp-1500&...`
+
+### DialgaDex Tab — Atacantes generales
+
+Entrada: top 5 con filtros Mega y Legendario activados
+
+Proceso:
+1. Playwright scrapea `dialgadex.com/?strongest&t=Any`
+2. LoadStrongest calcula eDPS en el navegador
+3. Se extraen 1676 Pokémon rankeados
+4. Se filtran por Mega y Legendario
+5. Cada Pokémon resuelve su anteevolución vía PokéAPI
+6. Se genera cadena con IDs base
+
+Ejemplo de resolución de anteevolución:
+| Pokémon en ranking | ID ranking | Anteevolución | ID base |
+|---|---|---|---|
+| Charizard | 6 | Charmander | 4 |
+| Gengar | 94 | Gastly | 92 |
+| Salamence | 373 | Bagon | 371 |
+| Mega Lucario | 448 | Riolu | 447 |
+
+---
+
+## Notas
+
+- **Playwright:** En el primer uso descarga Chromium (~150 MB). Requiere conexión a internet.
+- **dialgadex.com:** Los cálculos de eDPS se ejecutan en el navegador. La app espera hasta 60 segundos.
+- **PokéAPI:** Las consultas de anteevolución se cachean en memoria durante la sesión.
+- **Límite de velocidad:** PokéAPI tiene rate limit; para listas extensas puede tomar unos segundos.
