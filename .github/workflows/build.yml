@@ -73,6 +73,15 @@ jobs:
           done
           pyinstaller "${PYINSTALLER_ARGS[@]}" pokechain.py
 
+      - name: Debug PyInstaller output
+        run: |
+          echo "=== build/dist ==="
+          ls -la build/dist/
+          echo "=== build/dist/pokechain ==="
+          ls -la build/dist/pokechain/ 2>/dev/null || echo "NO EXISTE"
+          echo "=== build/work ==="
+          ls -la build/work/ 2>/dev/null || echo "NO EXISTE"
+
       - name: Package .deb
         run: |
           set -x
