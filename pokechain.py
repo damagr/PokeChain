@@ -1,4 +1,5 @@
 import io
+import json
 import re
 import tkinter as tk
 from tkinter import messagebox, ttk
@@ -6,6 +7,7 @@ import os
 import requests
 import PIL.Image
 import PIL.ImageDraw
+from playwright.sync_api import sync_playwright
 
 
 # ==========================================
@@ -847,6 +849,9 @@ class DialgadexTab(ttk.Frame):
         self.status_bar = status_bar
         self.colors = colors
         self._cache_ids = None
+        self._playwright = None
+        self._browser = None
+        self._pw_context = None
         self._build_ui()
 
     def _build_ui(self):
@@ -969,15 +974,25 @@ class DialgadexTab(ttk.Frame):
         self.output.set_text(resultado)
         self.output.set_state(tk.DISABLED)
 
-    def _filtrar_atacantes(self, datos, inedito, mega, oscuro, legendario):
+    def _filtrar_rankings(self, rankings, raw_data, inedito, mega, oscuro, legendario):
+        """Filtra los rankings scrapeados según los toggles del usuario."""
+        # Construir lookup de released desde raw_data
+        released_lookup = {}
+        for p in raw_data:
+            key = (int(p["id"]), p.get("form", "Normal"), p.get("shadow", False))
+            released_lookup[key] = p.get("released", True)
+
         resultado = []
-        for p in datos:
+        for p in rankings:
             incluir = False
+            key = (int(p["id"]), p.get("form", "Normal"), p.get("shadow", False))
+            es_lanzado = released_lookup.get(key, True)
+
             es_normal = (
                 p.get("class") is None
                 and not p.get("shadow", False)
                 and p.get("form", "Normal") == "Normal"
-                and p.get("released", False)
+                and es_lanzado
             )
             if es_normal:
                 incluir = True
@@ -989,13 +1004,15 @@ class DialgadexTab(ttk.Frame):
                 "POKEMON_CLASS_ULTRA_BEAST",
             ):
                 incluir = True
-            if mega and p.get("form") in ("Mega", "MegaY", "MegaZ"):
+            if mega and (
+                p.get("form") in ("Mega", "MegaY", "MegaZ", "Primal")
+                or p.get("class") == "POKEMON_CLASS_PRIMAL"
+            ):
                 incluir = True
-            if inedito and not p.get("released", True):
+            if inedito and not es_lanzado:
                 incluir = True
             if incluir:
                 resultado.append(p)
-        resultado.sort(key=lambda x: x.get("stats", {}).get("baseAttack", 0), reverse=True)
         return resultado
 
     def _generar_cadena(self, lista_pokemon, cantidad):
@@ -1004,19 +1021,26 @@ class DialgadexTab(ttk.Frame):
 
         top = lista_pokemon[:cantidad]
         total = len(top)
-        self._cache_ids = set()
+        self._cache_ids = []
 
         for i, p in enumerate(top):
             if self._cancelled:
                 break
-            nombre = limpiar_nombre_especie(p["name"])
+            id_pokemon = int(p["id"])
             es_shadow = p.get("shadow", False)
+            nombre = p.get("name", "")
+            if nombre:
+                nombre_clean = limpiar_nombre_especie(nombre)
+                nombre_clean = re.sub(r"^Primal\s+", "", nombre_clean)
+                nombre_clean = nombre_clean.replace("_", "-").replace(" ", "-").lower().strip("-")
+                if nombre_clean:
+                    id_base = self.api.buscar_anteevolucion(nombre_clean)
+                    if id_base:
+                        id_pokemon = int(id_base)
+            entrada = (id_pokemon, es_shadow)
 
-            id_base = self.api.buscar_anteevolucion(nombre)
-            if not id_base:
-                id_base = p["id"]
-
-            self._cache_ids.add((int(id_base), es_shadow))
+            if entrada not in self._cache_ids:
+                self._cache_ids.append(entrada)
 
             pct = 100 * (i + 1) // total
             self.status_bar.set_message(f"Procesando {i+1}/{total} ({pct}%)", pct)
@@ -1025,6 +1049,115 @@ class DialgadexTab(ttk.Frame):
         if not self._cancelled:
             self._regenerar()
             self.status_bar.set_message(f"Completado: {total} Pokemon procesados", 100)
+
+    def _get_browser(self):
+        """Obtiene o crea el browser de Playwright."""
+        if self._browser and self._browser.is_connected():
+            return self._browser
+        try:
+            if self._playwright is None:
+                self._playwright = sync_playwright().start()
+            self._browser = self._playwright.chromium.launch(
+                headless=True, channel="chromium"
+            )
+            self._pw_context = self._browser.new_context(
+                viewport={"width": 1280, "height": 720},
+                user_agent=(
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                    "AppleWebKit/537.36 (KHTML, like Gecko) "
+                    "Chrome/120.0.0.0 Safari/537.36"
+                ),
+            )
+            return self._browser
+        except Exception as e:
+            messagebox.showerror(
+                "Error de Playwright",
+                f"No se pudo iniciar el navegador.\n{e}\n\n"
+                "Asegurate de tener Chromium instalado:\n"
+                "  python3 -m playwright install chromium"
+            )
+            return None
+
+    def _scrape_rankings(self):
+        """Scrapea los rankings de dialgadex.com usando Playwright."""
+        browser = self._get_browser()
+        if not browser:
+            return None
+        if self._cancelled:
+            return None
+
+        page = self._pw_context.new_page()
+        try:
+            self.status_bar.set_message("Cargando dialgadex.com...", 10)
+            self.update()
+
+            page.goto(
+                "https://dialgadex.com/?strongest&t=Any",
+                wait_until="networkidle",
+                timeout=45000,
+            )
+
+            if self._cancelled:
+                return None
+
+            self.status_bar.set_message("Esperando calculos de DialgaDex...", 40)
+            self.update()
+
+            page.set_default_timeout(60000)
+            data_json = page.evaluate("""
+                async () => {
+                    try {
+                        await LoadStrongest('Any', false);
+                        if (typeof str_pokemons === 'undefined' || !str_pokemons) {
+                            return JSON.stringify({error: 'str_pokemons no disponible'});
+                        }
+                        return JSON.stringify(str_pokemons);
+                    } catch(e) {
+                        return JSON.stringify({error: e.message});
+                    }
+                }
+            """)
+
+            if self._cancelled:
+                return None
+
+            self.status_bar.set_message("Extrayendo datos...", 70)
+            self.update()
+
+            datos = json.loads(data_json)
+            if isinstance(datos, dict) and "error" in datos:
+                raise RuntimeError(datos["error"])
+            return datos
+        except Exception as e:
+            messagebox.showerror(
+                "Error de conexion",
+                f"Error al obtener datos de DialgaDex:\n{e}\n\n"
+                "Verifica tu conexion a internet e intenta de nuevo."
+            )
+            return None
+        finally:
+            page.close()
+
+    def _cleanup_playwright(self):
+        """Limpia los recursos de Playwright."""
+        try:
+            if self._pw_context:
+                self._pw_context.close()
+        except Exception:
+            pass
+        try:
+            if self._browser:
+                self._browser.close()
+        except Exception:
+            pass
+        try:
+            if self._playwright:
+                self._playwright.stop()
+        except Exception:
+            pass
+        self._pw_context = None
+        self._browser = None
+        self._playwright = None
 
     def _obtener_lista_atacantes(self):
         if hasattr(self, '_running') and self._running:
@@ -1038,9 +1171,11 @@ class DialgadexTab(ttk.Frame):
         self.update()
 
         try:
-            datos = self.api.descargar_dialgadex()
-            if not datos or self._cancelled:
+            rankings = self._scrape_rankings()
+            if not rankings or self._cancelled:
                 return
+
+            raw_data = self.api.descargar_dialgadex()
 
             inedito = self.var_inedito.get()
             mega = self.var_mega.get()
@@ -1051,7 +1186,9 @@ class DialgadexTab(ttk.Frame):
                 messagebox.showwarning("Aviso", "Activa al menos un filtro.")
                 return
 
-            filtrados = self._filtrar_atacantes(datos, inedito, mega, oscuro, legendario)
+            filtrados = self._filtrar_rankings(
+                rankings, raw_data, inedito, mega, oscuro, legendario
+            )
 
             if not filtrados or self._cancelled:
                 return
@@ -1129,6 +1266,12 @@ class PokeChainApp(tk.Tk):
 
         self._bind_shortcuts()
         self.idioma.trace_add("write", self._on_idioma_change)
+        self.protocol("WM_DELETE_WINDOW", self._on_close)
+
+    def _on_close(self):
+        """Limpia recursos antes de cerrar."""
+        self.tab2._cleanup_playwright()
+        self.destroy()
 
     def _create_menu(self):
         menubar = tk.Menu(self)
