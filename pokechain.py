@@ -1,5 +1,4 @@
 import io
-import math
 import re
 import tkinter as tk
 from tkinter import messagebox, ttk
@@ -13,8 +12,6 @@ import PIL.ImageDraw
 # CONSTANTES
 # ==========================================
 DIALGADEX_URL = "https://raw.githubusercontent.com/mgrann03/pokemon-resources/main/pogo_pkm.min.json"
-FAST_MOVES_URL = "https://raw.githubusercontent.com/mgrann03/pokemon-resources/main/pogo_fm.json"
-CHARGED_MOVES_URL = "https://raw.githubusercontent.com/mgrann03/pokemon-resources/main/pogo_cm.json"
 PVPOKE_GAMEMASTER_URL = "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/gamemaster.min.json"
 PVPOKE_RANKINGS_URLS = {
     "Great League": "https://raw.githubusercontent.com/pvpoke/pvpoke/master/src/data/rankings/all/overall/rankings-1500.json",
@@ -26,42 +23,6 @@ PVPOKE_CP_CAPS = {
     "Ultra League": 2500,
     "Master League": None,
 }
-
-POKEMON_TYPES = {
-    "Normal", "Fire", "Water", "Grass", "Electric", "Ice",
-    "Fighting", "Poison", "Ground", "Flying", "Psychic", "Bug",
-    "Rock", "Ghost", "Dragon", "Dark", "Steel", "Fairy",
-}
-
-TYPE_EFFECTIVENESS = {
-    "Normal":   (["Ghost"], ["Rock", "Steel"], []),
-    "Fire":     ([], ["Dragon", "Fire", "Rock", "Water"], ["Bug", "Grass", "Ice", "Steel"]),
-    "Water":    ([], ["Dragon", "Grass", "Water"], ["Fire", "Ground", "Rock"]),
-    "Grass":    ([], ["Bug", "Dragon", "Fire", "Flying", "Grass", "Poison", "Steel"], ["Ground", "Rock", "Water"]),
-    "Electric": (["Ground"], ["Dragon", "Electric", "Grass"], ["Flying", "Water"]),
-    "Ice":      ([], ["Fire", "Ice", "Steel", "Water"], ["Dragon", "Flying", "Grass", "Ground"]),
-    "Fighting": (["Ghost"], ["Bug", "Fairy", "Flying", "Poison", "Psychic"], ["Dark", "Ice", "Normal", "Rock", "Steel"]),
-    "Poison":   (["Steel"], ["Ghost", "Ground", "Poison", "Rock"], ["Fairy", "Grass"]),
-    "Ground":   (["Flying"], ["Bug", "Grass"], ["Electric", "Fire", "Poison", "Rock", "Steel"]),
-    "Flying":   ([], ["Electric", "Rock", "Steel"], ["Bug", "Fighting", "Grass"]),
-    "Psychic":  (["Dark"], ["Psychic", "Steel"], ["Fighting", "Poison"]),
-    "Bug":      ([], ["Fairy", "Fighting", "Fire", "Flying", "Ghost", "Poison", "Steel"], ["Dark", "Grass", "Psychic"]),
-    "Rock":     ([], ["Fighting", "Ground", "Steel"], ["Bug", "Fire", "Flying", "Ice"]),
-    "Ghost":    (["Normal"], ["Dark"], ["Ghost", "Psychic"]),
-    "Dragon":   (["Fairy"], ["Steel"], ["Dragon"]),
-    "Dark":     ([], ["Dark", "Fairy", "Fighting"], ["Ghost", "Psychic"]),
-    "Steel":    ([], ["Electric", "Fire", "Steel", "Water"], ["Fairy", "Ice", "Rock"]),
-    "Fairy":    ([], ["Fire", "Poison", "Steel"], ["Dark", "Dragon", "Fighting"]),
-}
-
-CPM_LEVEL_40 = 0.7903
-CPM_LEVEL_50 = 0.8403
-
-RAID_TIER_HP = {1: 600, 2: 600, 3: 3600, 4: 9000, 5: 15000, 6: 22500}
-RAID_TIER_CPM = {1: 0.6, 2: 0.67, 3: 0.73, 4: 0.79, 5: 0.79, 6: 1.0}
-
-ESTIMATED_Y_NUMERATOR = 1970
-ESTIMATED_CM_POWER = 11670
 
 LIGHT_COLORS = {
     'bg': '#f0f4f8',
@@ -515,351 +476,6 @@ def analizar_raw(nombre_sucio):
 
 
 # ==========================================
-# FUNCIONES DE CALCULO DE eDPS
-# ==========================================
-def get_effectiveness_mult(attack_type, defender_types):
-    """Calcula el multiplicador de efectividad de tipo."""
-    eff = TYPE_EFFECTIVENESS.get(attack_type)
-    if not eff:
-        return 1.0
-    immune, resisted, super_eff = eff
-    mult = 1.0
-    for dtype in defender_types:
-        if dtype in immune:
-            mult *= 0.390625
-        elif dtype in resisted:
-            mult *= 0.625
-        elif dtype in super_eff:
-            mult *= 1.6
-    return mult
-
-
-def get_types_effectiveness(defender_types):
-    """Retorna mapa de efectividad de todos los tipos contra un defensor."""
-    result = {}
-    for atype in POKEMON_TYPES:
-        result[atype] = get_effectiveness_mult(atype, defender_types)
-    return result
-
-
-def get_stab(pokemon_types, move_type, move_name):
-    """Retorna multiplicador STAB (1.2x si es tipo propio y no es Hidden Power)."""
-    if move_type in pokemon_types and not move_name.startswith("Hidden Power"):
-        return 1.2
-    return 1.0
-
-
-def calc_damage(atk, def_, power, modifiers):
-    """Formula de dano de Pokemon Go."""
-    return 0.5 * power * (atk / def_) * modifiers + 0.5
-
-
-def process_duration(duration_ms):
-    """Redondea duracion al 0.5s mas cercano (modo pve_turns)."""
-    return round((duration_ms / 1000) * 2) / 2
-
-
-def process_power(move_obj):
-    """Ajusta poder si la redondeo de duracion cambio significativamente."""
-    new_dur = process_duration(move_obj["duration"])
-    old_dur = move_obj["duration"] / 1000.0
-    if new_dur > 0:
-        modifier = (new_dur - old_dur) / new_dur
-        if abs(modifier) >= 0.199:
-            return move_obj["power"] * (1 + modifier)
-    return move_obj["power"]
-
-
-def get_pokemon_stats(pkm_obj, level=40, ivs=None):
-    """Obtiene stats a un nivel especifico con IVs."""
-    if ivs is None:
-        ivs = {"atk": 15, "def": 15, "hp": 15}
-    stats = pkm_obj.get("stats", {})
-    cpm = CPM_LEVEL_40 if level == 40 else CPM_LEVEL_50
-    atk = (stats.get("baseAttack", 0) + ivs["atk"]) * cpm
-    def_ = (stats.get("baseDefense", 0) + ivs["def"]) * cpm
-    hp = (stats.get("baseStamina", 0) + ivs["hp"]) * cpm
-    return atk, def_, hp
-
-
-def get_dps(types, atk, def_, hp, fm_obj, cm_obj, fm_mult=1, cm_mult=1,
-            enemy_def=180, enemy_y=None):
-    """Calcula DPS completo con ciclo de energia (mismo algoritmo que DialgaDex GetDPS)."""
-    if not fm_obj or not cm_obj:
-        return 0
-
-    if enemy_y is None:
-        enemy_y = {"y_num": None, "cm_num": None}
-
-    y_num = enemy_y.get("y_num") or ESTIMATED_Y_NUMERATOR
-    cm_num = enemy_y.get("cm_num") or ESTIMATED_CM_POWER
-
-    y = y_num / def_ if def_ > 0 else ESTIMATED_Y_NUMERATOR / 180
-    in_cm_dmg = cm_num / def_ if def_ > 0 else ESTIMATED_CM_POWER / 180
-
-    fm_dur = process_duration(fm_obj["duration"])
-    cm_dur = process_duration(cm_obj["duration"])
-
-    if fm_dur <= 0 or cm_dur <= 0:
-        return 0
-
-    fm_power = process_power(fm_obj)
-    cm_power = process_power(cm_obj)
-
-    fm_stab = 1.2 if (fm_obj["type"] in types and fm_obj["name"] != "Hidden Power") else 1
-    fm_dmg = calc_damage(atk, enemy_def, fm_power, fm_mult * fm_stab)
-    fm_dps = fm_dmg / fm_dur
-    fm_eps = fm_obj["energy_delta"] / fm_dur
-
-    cm_stab = 1.2 if cm_obj["type"] in types else 1
-    cm_dmg = calc_damage(atk, enemy_def, cm_power, cm_mult * cm_stab)
-    cm_dps = cm_dmg / cm_dur
-
-    if fm_dps > cm_dps:
-        return fm_dps
-
-    cm_eps = -cm_obj["energy_delta"] / cm_dur
-
-    if cm_obj["energy_delta"] == -100:
-        dws = 0
-        cm_eps = (-cm_obj["energy_delta"] + 0.5 * fm_obj["energy_delta"]
-                  + 0.5 * y * dws) / cm_dur
-
-    x = 0.5 * (-cm_obj["energy_delta"]) + 0.5 * fm_obj["energy_delta"]
-    x = x + 0.5 * in_cm_dmg
-
-    tof = hp / y if y > 0 else hp
-
-    f_to_c_ratio_num = (tof * (-cm_obj["energy_delta"]) + cm_dur * (x - 0.5 * hp))
-    f_to_c_ratio_den = (tof * fm_obj["energy_delta"] - fm_dur * (x - 0.5 * hp))
-
-    if f_to_c_ratio_den <= 0:
-        return fm_dps
-
-    f_to_c_ratio = f_to_c_ratio_num / f_to_c_ratio_den
-
-    cm_dps_adj = cm_dps
-
-    if cm_eps + fm_eps <= 0:
-        return fm_dps
-
-    dps0 = (fm_dps * cm_eps + cm_dps_adj * fm_eps) / (cm_eps + fm_eps)
-    dps = dps0 + ((cm_dps_adj - fm_dps) / (cm_eps + fm_eps)) * (0.5 - x / hp) * y
-
-    return fm_dps if fm_dps > dps else max(dps, 0)
-
-
-def get_tdo(dps, hp, def_, enemy_y=None):
-    """Calcula Total Damage Output."""
-    if enemy_y is None:
-        enemy_y = {"y_num": None}
-    y_num = enemy_y.get("y_num") or ESTIMATED_Y_NUMERATOR
-    y = y_num / def_ if def_ > 0 else ESTIMATED_Y_NUMERATOR / 180
-    tof = hp / y if y > 0 else 1
-    return dps * tof
-
-
-def get_edps(dps, tdo, hp=1000000000, team_size=6, relobby_time=10):
-    """Calcula eDPS efectivo con relobbying (mismo algoritmo que DialgaDex GetEDPS)."""
-    if dps <= 0 or tdo <= 0:
-        return 0
-    RESPAWN_TIME = 1
-    tof = tdo / dps
-    lives = hp / tdo
-    deaths = max(0, math.ceil(lives) - 1)
-    relobbies = deaths // team_size
-    ttw = lives * tof + (deaths - relobbies) * RESPAWN_TIME + relobby_time * relobbies
-    return hp / ttw if ttw > 0 else 0
-
-
-def get_specific_y(types, atk, fm_obj, cm_obj, total_incoming_dps=50):
-    """Calcula el DPS del enemigo contra nuestro Pokemon."""
-    if not fm_obj or not cm_obj:
-        return {"Any": {"y_num": 0, "cm_num": 0}}
-
-    CHARGED_MOVE_CHANCE = 0.3
-    ENERGY_PER_HP = 0.5
-    FM_DELAY = 1.75
-    CM_DELAY = 0.5
-
-    fm_stab = 1.2 if (fm_obj["type"] in types and fm_obj["name"] != "Hidden Power") else 1
-    fm_power = process_power(fm_obj)
-    fm_num = 0.5 * fm_power * fm_stab * atk
-    fm_dur = process_duration(fm_obj["duration"]) + FM_DELAY
-
-    cm_stab = 1.2 if cm_obj["type"] in types else 1
-    cm_power = process_power(cm_obj)
-    cm_num = 0.5 * cm_power * cm_stab * atk
-    cm_dur = process_duration(cm_obj["duration"]) + CM_DELAY
-
-    eps_for_damage = ENERGY_PER_HP * total_incoming_dps
-    fms_per_cm = (-cm_obj["energy_delta"] - eps_for_damage * cm_dur) / \
-                 (fm_obj["energy_delta"] + eps_for_damage * fm_dur)
-    if fms_per_cm < 0:
-        fms_per_cm = 0
-    fms_per_cm = fms_per_cm + (1 / CHARGED_MOVE_CHANCE) - 1
-
-    cycle_dur = fms_per_cm * fm_dur + cm_dur
-    if cycle_dur <= 0:
-        return {"Any": {"y_num": 0, "cm_num": 0}}
-
-    type_ys = {"Any": {
-        "y_num": (fms_per_cm * fm_num + cm_num) / cycle_dur,
-        "cm_num": cm_num
-    }}
-
-    if fm_obj["type"] == cm_obj["type"]:
-        type_ys[fm_obj["type"]] = type_ys["Any"]
-    else:
-        type_ys[fm_obj["type"]] = {
-            "y_num": (fms_per_cm * fm_num) / cycle_dur,
-            "cm_num": 0
-        }
-        type_ys[cm_obj["type"]] = {
-            "y_num": cm_num / cycle_dur,
-            "cm_num": cm_num
-        }
-
-    return type_ys
-
-
-def avg_y_against(enemy_y, effectiveness):
-    """Aplica efectividad de tipo al enemy_y."""
-    result = {"y_num": 0, "cm_num": 0}
-    for t, vals in enemy_y.items():
-        if t == "Any":
-            continue
-        mult = effectiveness.get(t, 1.0)
-        result["y_num"] += vals["y_num"] * mult
-        result["cm_num"] += vals["cm_num"] * mult
-    return result
-
-
-def get_raid_stats(pkm_obj, tier=None):
-    """Obtiene stats de jefe de raid."""
-    if tier is None:
-        tier = pkm_obj.get("raid_tier", 5)
-    if pkm_obj.get("form") in ("Mega", "MegaY", "MegaZ"):
-        tier = 4
-    if pkm_obj.get("class") and pkm_obj.get("form") == "Mega":
-        tier = 6
-
-    cpm = RAID_TIER_CPM.get(tier, 0.79)
-    ivs_atk, ivs_def, ivs_hp = 15, 15, 15
-    stats = pkm_obj.get("stats", {})
-    atk = (stats.get("baseAttack", 0) + ivs_atk) * cpm
-    def_ = (stats.get("baseDefense", 0) + ivs_def) * cpm
-    hp = RAID_TIER_HP.get(tier, 15000)
-    return atk, def_, hp
-
-
-def get_raid_bosses(all_pokemon, has_type=None, weak_to_type=None):
-    """Encuentra jefes de raid de tier 4+."""
-    bosses = []
-    for p in all_pokemon:
-        if not p.get("raid_tier") or p["raid_tier"] < 4:
-            continue
-        if has_type and has_type not in p.get("types", []):
-            continue
-        if weak_to_type:
-            eff = get_effectiveness_mult(weak_to_type, p.get("types", []))
-            if eff <= 1.01:
-                continue
-        bosses.append(p)
-    return bosses
-
-
-def get_type_affinity(all_pokemon, attack_type):
-    """Calcula Type Affinity: promedio de jefes de raid debiles a un tipo."""
-    bosses = get_raid_bosses(all_pokemon, weak_to_type=attack_type)
-    if not bosses:
-        bosses = get_raid_bosses(all_pokemon)
-
-    avg_ys = {"Any": {"y_num": 0, "cm_num": 0}}
-    for t in POKEMON_TYPES:
-        avg_ys[t] = {"y_num": 0, "cm_num": 0}
-
-    avg_stats = {"atk": 0, "def": 0, "hp": 0}
-    avg_weakness = {t: 0 for t in POKEMON_TYPES}
-
-    for boss in bosses:
-        boss_types = boss.get("types", [])
-
-        boss_atk, boss_def, boss_hp = get_raid_stats(boss)
-
-        boss_weakness = get_types_effectiveness(boss_types)
-        for t in POKEMON_TYPES:
-            avg_weakness[t] += boss_weakness.get(t, 1.0)
-
-        boss_fms = boss.get("fm", [])
-        boss_cms = boss.get("cm", [])
-        boss_elite_fms = boss.get("elite_fm", [])
-        boss_elite_cms = boss.get("elite_cm", [])
-        all_boss_fms = boss_fms + boss_elite_fms
-        all_boss_cms = boss_cms + boss_elite_cms
-
-        win_dps = boss_hp / (300 if boss.get("raid_tier", 5) >= 4 else 180)
-
-        boss_ys_list = []
-        for bfm in all_boss_fms:
-            for bcm in all_boss_cms:
-                bfm_obj = FAST_MOVES_DATA.get(bfm)
-                bcm_obj = CHARGED_MOVES_DATA.get(bcm)
-                if bfm_obj and bcm_obj:
-                    sy = get_specific_y(boss_types, boss_atk, bfm_obj, bcm_obj, win_dps)
-                    boss_ys_list.append(sy)
-
-        if not boss_ys_list:
-            continue
-
-        boss_avg_y = {"Any": {"y_num": 0, "cm_num": 0}}
-        for t in POKEMON_TYPES:
-            boss_avg_y[t] = {"y_num": 0, "cm_num": 0}
-
-        for sy in boss_ys_list:
-            for t, vals in sy.items():
-                if t in boss_avg_y:
-                    boss_avg_y[t]["y_num"] += vals["y_num"]
-                    boss_avg_y[t]["cm_num"] += vals["cm_num"]
-
-        n = len(boss_ys_list)
-        for t in boss_avg_y:
-            boss_avg_y[t]["y_num"] /= n
-            boss_avg_y[t]["cm_num"] /= n
-
-        for t in POKEMON_TYPES:
-            avg_ys[t]["y_num"] += boss_avg_y[t]["y_num"]
-            avg_ys[t]["cm_num"] += boss_avg_y[t]["cm_num"]
-        avg_ys["Any"]["y_num"] += boss_avg_y["Any"]["y_num"]
-        avg_ys["Any"]["cm_num"] += boss_avg_y["Any"]["cm_num"]
-
-        avg_stats["atk"] += boss_atk
-        avg_stats["def"] += boss_def
-        avg_stats["hp"] += boss_hp
-
-    n_bosses = len(bosses) if bosses else 1
-    for t in avg_ys:
-        avg_ys[t]["y_num"] /= n_bosses
-        avg_ys[t]["cm_num"] /= n_bosses
-    avg_stats["atk"] /= n_bosses
-    avg_stats["def"] /= n_bosses
-    avg_stats["hp"] /= n_bosses
-    for t in avg_weakness:
-        avg_weakness[t] /= n_bosses
-
-    return {
-        "enemy_ys": [avg_ys],
-        "stats": avg_stats,
-        "weakness": avg_weakness,
-    }
-
-
-FAST_MOVES_DATA = {}
-CHARGED_MOVES_DATA = {}
-ALL_POKEMON_DATA = []
-
-
-# ==========================================
 # API CACHE
 # ==========================================
 class ApiCache:
@@ -868,8 +484,6 @@ class ApiCache:
         self._cache_dialgadex = None
         self._cache_gamemaster = None
         self._cache_rankings = {}
-        self._cache_fast_moves = None
-        self._cache_charged_moves = None
         self._session = requests.Session()
         self._timeout = 15
 
@@ -907,30 +521,6 @@ class ApiCache:
             except Exception:
                 pass
         return self._cache_gamemaster
-
-    def descargar_fast_moves(self):
-        if self._cache_fast_moves is not None:
-            return self._cache_fast_moves
-        try:
-            r = self._session.get(FAST_MOVES_URL, timeout=30)
-            if r.status_code == 200:
-                self._cache_fast_moves = {m["name"]: m for m in r.json()}
-                return self._cache_fast_moves
-        except Exception:
-            pass
-        return None
-
-    def descargar_charged_moves(self):
-        if self._cache_charged_moves is not None:
-            return self._cache_charged_moves
-        try:
-            r = self._session.get(CHARGED_MOVES_URL, timeout=30)
-            if r.status_code == 200:
-                self._cache_charged_moves = {m["name"]: m for m in r.json()}
-                return self._cache_charged_moves
-        except Exception:
-            pass
-        return None
 
     def descargar_rankings(self, liga):
         if liga in self._cache_rankings:
@@ -972,21 +562,7 @@ class PvPokeTab(ttk.Frame):
         self.colors = colors
         self._cache_ids = None
         self._prefijo_liga = ""
-        self._liga_actual = None
         self._build_ui()
-
-    def _generar_prefijo_liga(self, liga, idioma):
-        cp_cap = PVPOKE_CP_CAPS.get(liga, 1500)
-        if cp_cap is not None:
-            if idioma == "English":
-                return f"cp-{cp_cap}&-1attack&3-defense&3-hp&"
-            else:
-                return f"PC-{cp_cap}&3-4puntos de salud&3-4defensa&0-1ataque&"
-        else:
-            if idioma == "English":
-                return "4*,3*&"
-            else:
-                return "4*;3*&"
 
     def _build_ui(self):
         self.columnconfigure(0, weight=1)
@@ -1109,7 +685,6 @@ class PvPokeTab(ttk.Frame):
         if btn.cget("text") == "Cancelar":
             self._cancelled = True
         else:
-            self._liga_actual = liga
             self._obtener_lista_pvp(liga)
 
     def _obtener_lista_pvp(self, liga):
@@ -1157,7 +732,17 @@ class PvPokeTab(ttk.Frame):
         total = len(top)
         self._cache_ids = set()
 
-        self._prefijo_liga = self._generar_prefijo_liga(liga, idioma)
+        cp_cap = PVPOKE_CP_CAPS.get(liga, 1500)
+        if cp_cap is not None:
+            if idioma == "English":
+                self._prefijo_liga = f"cp-{cp_cap}&-1attack&3-defense&3-hp&"
+            else:
+                self._prefijo_liga = f"PC-{cp_cap}&3-4puntos de salud&3-4defensa&0-1ataque&"
+        else:
+            if idioma == "English":
+                self._prefijo_liga = "4*,3*&"
+            else:
+                self._prefijo_liga = "4*;3*&"
 
         self.status_bar.set_message(f"Procesando {total} Pokemon...", 0)
 
@@ -1244,9 +829,6 @@ class PvPokeTab(ttk.Frame):
         self.output.set_state(tk.DISABLED)
 
     def on_idioma_change(self):
-        if self._liga_actual and self._cache_ids is not None:
-            idioma = self.idioma_var.get()
-            self._prefijo_liga = self._generar_prefijo_liga(self._liga_actual, idioma)
         self._regenerar()
 
     def update_toggle_bgs(self, bg):
@@ -1265,7 +847,6 @@ class DialgadexTab(ttk.Frame):
         self.status_bar = status_bar
         self.colors = colors
         self._cache_ids = None
-        self._type_affinity_cache = {}
         self._build_ui()
 
     def _build_ui(self):
@@ -1414,92 +995,8 @@ class DialgadexTab(ttk.Frame):
                 incluir = True
             if incluir:
                 resultado.append(p)
-
-        global FAST_MOVES_DATA, CHARGED_MOVES_DATA, ALL_POKEMON_DATA
-        if not FAST_MOVES_DATA:
-            FAST_MOVES_DATA = self.api.descargar_fast_moves() or {}
-        if not CHARGED_MOVES_DATA:
-            CHARGED_MOVES_DATA = self.api.descargar_charged_moves() or {}
-        ALL_POKEMON_DATA = datos
-
-        if FAST_MOVES_DATA and CHARGED_MOVES_DATA:
-            self._type_affinity_cache = {}
-            for t in POKEMON_TYPES:
-                self._type_affinity_cache[t] = get_type_affinity(datos, t)
-            for p in resultado:
-                p["_edps"] = self._calcular_edps_pokemon(p)
-            resultado.sort(key=lambda x: x.get("_edps", 0), reverse=True)
-        else:
-            resultado.sort(key=lambda x: x.get("stats", {}).get("baseAttack", 0), reverse=True)
-
+        resultado.sort(key=lambda x: x.get("stats", {}).get("baseAttack", 0), reverse=True)
         return resultado
-
-    def _calcular_edps_pokemon(self, pkm_obj):
-        """Calcula el mejor eDPS de un Pokemon usando Type Affinity."""
-        types = pkm_obj.get("types", [])
-        is_shadow = pkm_obj.get("shadow", False)
-
-        atk, def_, hp = get_pokemon_stats(pkm_obj, level=40)
-        if is_shadow:
-            atk *= 1.2
-            def_ *= 0.8333333
-        hp = int(hp)
-
-        attacker_effectiveness = get_types_effectiveness(types)
-
-        fms = pkm_obj.get("fm", [])
-        elite_fms = pkm_obj.get("elite_fm", [])
-        cms = pkm_obj.get("cm", [])
-        elite_cms = pkm_obj.get("elite_cm", [])
-
-        all_fms = fms + elite_fms
-        all_cms = cms + elite_cms
-
-        if not all_fms or not all_cms:
-            return 0
-
-        best_edps = 0
-        for fm_name in all_fms:
-            fm_obj = FAST_MOVES_DATA.get(fm_name)
-            if not fm_obj:
-                continue
-
-            for cm_name in all_cms:
-                cm_obj = CHARGED_MOVES_DATA.get(cm_name)
-                if not cm_obj:
-                    continue
-
-                cm_type = cm_obj["type"]
-                enemy_params = self._type_affinity_cache.get(cm_type)
-                if not enemy_params:
-                    enemy_params = self._type_affinity_cache.get("Any")
-                if not enemy_params:
-                    continue
-
-                enemy_ys = enemy_params["enemy_ys"]
-                enemy_def = enemy_params["stats"]["def"]
-                enemy_hp = enemy_params["stats"]["hp"]
-                enemy_weakness = enemy_params["weakness"]
-
-                fm_mult = enemy_weakness.get(fm_obj["type"], 1.0)
-                cm_mult = enemy_weakness.get(cm_type, 1.0)
-
-                best_combo_edps = 0
-                for ey in enemy_ys:
-                    y = avg_y_against(ey, attacker_effectiveness)
-
-                    dps = get_dps(types, atk, def_, hp, fm_obj, cm_obj,
-                                 fm_mult, cm_mult, enemy_def, y)
-                    tdo = get_tdo(dps, hp, def_, y)
-                    edps = get_edps(dps, tdo, enemy_hp, 6, 10)
-
-                    if edps > best_combo_edps:
-                        best_combo_edps = edps
-
-                if best_combo_edps > best_edps:
-                    best_edps = best_combo_edps
-
-        return best_edps
 
     def _generar_cadena(self, lista_pokemon, cantidad):
         self._cancelled = False
@@ -1536,7 +1033,7 @@ class DialgadexTab(ttk.Frame):
             self.status_bar.set_message(f"Completado: {total} Pokemon procesados", 100)
 
     def _obtener_lista_atacantes(self):
-        if self.btn_obtener.cget("text") == "Cancelar":
+        if hasattr(self, '_cancelled') and not self._cancelled:
             self._cancelled = True
             self.btn_obtener.config(text="Obtener Lista")
             self.status_bar.set_message("Cancelado", 0)
@@ -1544,7 +1041,7 @@ class DialgadexTab(ttk.Frame):
 
         self._cancelled = False
         self.btn_obtener.config(text="Cancelar")
-        self.status_bar.set_message("Descargando datos de Pokemon...", 0)
+        self.status_bar.set_message("Descargando datos de DialgaDex...", 0)
         self.update()
 
         datos = self.api.descargar_dialgadex()
@@ -1552,24 +1049,6 @@ class DialgadexTab(ttk.Frame):
             self.btn_obtener.config(state=tk.NORMAL, text="Obtener Lista")
             self.status_bar.clear()
             return
-
-        self.status_bar.set_message("Descargando datos de movimientos...", 30)
-        self.update()
-
-        global FAST_MOVES_DATA, CHARGED_MOVES_DATA
-        if not FAST_MOVES_DATA:
-            FAST_MOVES_DATA = self.api.descargar_fast_moves() or {}
-        if not CHARGED_MOVES_DATA:
-            CHARGED_MOVES_DATA = self.api.descargar_charged_moves() or {}
-
-        if not FAST_MOVES_DATA or not CHARGED_MOVES_DATA:
-            messagebox.showwarning("Aviso", "No se pudieron descargar los datos de movimientos.")
-            self.btn_obtener.config(state=tk.NORMAL, text="Obtener Lista")
-            self.status_bar.clear()
-            return
-
-        self.status_bar.set_message("Filtrando atacantes...", 50)
-        self.update()
 
         inedito = self.var_inedito.get()
         mega = self.var_mega.get()
@@ -1595,6 +1074,8 @@ class DialgadexTab(ttk.Frame):
         else:
             cantidad = len(filtrados)
         cantidad = min(cantidad, len(filtrados))
+
+        self._generar_cadena(filtrados, cantidad)
 
         self._generar_cadena(filtrados, cantidad)
 

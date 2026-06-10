@@ -1,153 +1,133 @@
-# PokeChain
-
-Generador de cadenas de busqueda de Pokemon para Pokemon Go. Auto-descarga rankings de PvPoke y datos de DialgaDex, aplica filtros y genera listas listas para copiar y pegar.
+Aquí tienes el archivo `README.md` completamente actualizado para reflejar todas las nuevas funciones, la división por pestañas, el procesamiento avanzado de cadenas y la integración de la API en ambas herramientas.
 
 ---
 
-## Instalacion en Windows (equipo recien formateado)
+# 🔍 PokeChain
 
-### Paso 1: Instalar Python
+**PokeChain** es una herramienta de escritorio con interfaz gráfica (GUI) diseñada para automatizar, limpiar y optimizar cadenas de búsqueda de Pokémon. Utiliza la [PokéAPI](https://pokeapi.co/) para rastrear líneas evolutivas y consolidar filtros avanzados compatibles con juegos y bases de datos externas.
 
-1. Ve a https://www.python.org/downloads/
-2. Haz clic en **Download Python 3.x.x** (el boton grande amarillo)
-3. Ejecuta el instalador descargado
-4. **IMPORTANTE:** Marca la casilla **"Add python.exe to PATH"** antes de instalar
-5. Haz clic en **Install Now**
-6. Espera a que termine y haz clic en **Close**
+---
 
-### Paso 2: Verificar la instalacion
+## 🚀 Características Principales
 
-Abre **PowerShell** (haz clic derecho en el boton de Windows y selecciona "Terminal" o "PowerShell") y escribe:
+La aplicación se divide en dos módulos especializados accesibles mediante pestañas:
+
+### 1. Buscador de Anteevoluciones (Pestaña 1)
+
+Convierte un listado de nombres de Pokémon en una cadena optimizada de IDs de sus formas base.
+
+* **Rastreo Evolutivo:** Consulta la API en tiempo real para encontrar la preevolución inicial de cualquier Pokémon introducido.
+* **Detección de Estado:** Identifica automáticamente si el Pokémon es *Shadow* u *Oscuro* y le añade el prefijo correspondiente.
+* **Filtros de Liga Ajustables:** Permite añadir instantáneamente prefijos de filtrado de estadísticas para ligas específicas (*Great League* y *Ultra League*) con un solo clic.
+
+### 2. Dialgadex Helper (Pestaña 2)
+
+Parsea, sanea y traduce cadenas de búsqueda complejas ya existentes, aplicando también el filtro de anteevoluciones a los IDs numéricos.
+
+* **Limpieza de Modificadores Mega:** Remueve de forma inteligente etiquetas como `mega`, `mega1-` o residuos de conectores `&`.
+* **Filtro de Exclusión:** Descarta por completo bloques que contengan la palabra `investigación` y elimina términos huérfanos sueltos (como palabras `Oscuro` o `Shadow` sin ID asociado).
+* **Traducción Dinámica:** Traduce automáticamente todos los tipos elementales (ej: *Fuego* ↔ *Fire*) y estados según el idioma seleccionado en la interfaz.
+* **Conversión de IDs Existentes:** Toma los IDs numéricos o combinados de la cadena (ej: `26` o `Oscuro&26`) y los reemplaza por el ID de su anteevolución base (`+172` o `Oscuro&+172`), ordenando numéricamente todo el conjunto final.
+* **Prefijo Automatizado:** Añade al inicio de la cadena resultante el filtro de calidad predeterminado (`4*;3*;3-ataque&!#&`).
+
+---
+
+## 🛠️ Instalación
+
+### Windows
+
+1. **Instalar Python:** Descárgalo desde [python.org](https://www.python.org/downloads/). Durante la instalación, asegúrate de marcar la casilla **"Add Python to PATH"**.
+2. **Instalar Dependencias:** Abre la terminal (`cmd`) y ejecuta:
+```cmd
+pip install requests
 
 ```
-python --version
-```
 
-Si ves algo como `Python 3.12.x`, todo esta bien. Si da error, cierra y vuelve a abrir la terminal.
 
-### Paso 3: Descargar el programa
-
-1. Descarga o clona este repositorio en cualquier carpeta (por ejemplo `C:\PokeChain`)
-2. Abre PowerShell en esa carpeta:
-   - Haz clic derecho dentro de la carpeta y selecciona **"Abrir en Terminal"** o **"Open in Terminal"**
-   - O bien, escribe `cd C:\PokeChain` en PowerShell
-
-### Paso 4: Instalar dependencias
-
-En la terminal, escribe:
-
-```
-pip install requests Pillow
-```
-
-### Paso 5: Ejecutar
-
-En la terminal, escribe:
-
-```
+3. **Ejecutar:** Haz doble clic sobre el archivo `pokechain.py` o ejecútalo desde la terminal:
+```cmd
 python pokechain.py
+
 ```
 
----
 
-## Instalacion en Linux (equipo recien formateado)
 
-### Paso 1: Instalar Python y dependencias del sistema
+### Linux (Ubuntu / Debian / Fedora / Arch)
 
-**Ubuntu / Debian:**
-
+1. **Instalar Python y Tkinter:**
 ```bash
-sudo apt update
-sudo apt install -y python3 python3-pip python3-tk python3-pil python3-pil.imagetk
+# Ubuntu / Debian
+sudo apt install python3 python3-tk python3-pip
+
+# Fedora
+sudo dnf install python3 python3-tkinter
+
+# Arch
+sudo pacman -S python tk
+
 ```
 
-**Fedora:**
 
+2. **Instalar Dependencias:**
 ```bash
-sudo dnf install -y python3 python3-pip python3-tkinter python3-pillow-tk
+pip3 install requests
+
 ```
 
-**Arch / Manjaro:**
 
-```bash
-sudo pacman -S python python-pip tk pillow
-```
-
-### Paso 2: Verificar la instalacion
-
-```bash
-python3 --version
-```
-
-Si ves `Python 3.x.x`, esta todo correcto.
-
-### Paso 3: Descargar el programa
-
-```bash
-git clone https://github.com/USUARIO/PokeChain.git
-cd PokeChain
-```
-
-O simplemente descarga el archivo `pokechain.py` y colocalo en una carpeta.
-
-### Paso 4: Instalar dependencias de Python
-
-```bash
-pip3 install requests Pillow
-```
-
-### Paso 5: Ejecutar
-
+3. **Ejecutar:**
 ```bash
 python3 pokechain.py
+
+```
+
+
+
+---
+
+## 📊 Formatos de Entrada y Transformaciones
+
+### Módulo 1 (Búsqueda por nombres)
+
+| Entrada (Línea por línea) | Resultado Producido | Nota |
+| --- | --- | --- |
+| `Charizard` | `+4;` | Encuentra a Charmander (ID 4) |
+| `Mewtwo (Shadow)` | `Shadow&+150;` | Mantiene el estado en inglés |
+| `Mewtwo (Oscuro)` | `Oscuro&+150;` | Mantiene el estado en español |
+
+### Módulo 2 (Dialgadex Helper - Cadena Completa)
+
+| Cadena de Entrada de Ejemplo | Salida Procesada (Idioma: Español) |
+| --- | --- |
+| `mega2-&fuego,investigación;26;Oscuro&643` | `4*;3*;3-ataque&!#&Fuego;+172;Oscuro&+643;` |
+
+*El sistema elimina los residuos "mega", descarta el bloque de "investigación", traduce "fuego" a formato correcto, y convierte el ID `26` (Raichu) en `+172` (Pichu).*
+
+---
+
+## 🗂️ Estructura del Código
+
+```
+pokechain.py
+│
+├── Lógica Compartida
+│   ├── obtener_id_anteevolucion_puro() # Conexión iterativa con PokéAPI
+│   └── criterio_ordenacion()          # Extractor de secuencias numéricas para ordenación
+│
+├── Módulo Pestaña 1
+│   ├── analizar_nombre()              # Separa texto limpio de modificadores
+│   ├── obtener_anteevolucion_id()     # Genera el token final formateado
+│   └── aplicar_liga()                 # Inserción de cadenas de filtrado estático
+│
+└── Módulo Pestaña 2
+    ├── parsear_cadena_existente()     # Limpieza, traducción y conversión de IDs
+    └── procesar_concatenar()          # Formateo final con cabecera fija
+
 ```
 
 ---
 
-## Uso
+## 📝 Notas de Uso
 
-### Pestana PvPoke
-
-1. Selecciona los filtros que quieras (MT de Elite, Oscuro, Caramelos XL)
-2. Indica cuantos Pokemon quieres incluir
-3. Haz clic en **Great League**, **Ultra League** o **Master League**
-4. Espera a que se descarguen y procesen los datos
-5. Haz clic en **Copiar al Portapapeles**
-6. Pegalo en Pokemon Go
-
-### Pestana Dialgadex
-
-1. Selecciona los filtros (Inedito, Mega/Primigenio, Oscuro, Legendario)
-2. Indica cuantos Pokemon quieres incluir
-3. Haz clic en **Obtener Lista**
-4. Espera a que se descarguen y procesen los datos
-5. Haz clic en **Copiar al Portapapeles**
-6. Pegalo en Pokemon Go
-
-### Otras funciones
-
-- **Cambiar tema:** Pulsa `Ctrl+T` o usa el menu "Ver" para alternar entre modo claro y oscuro
-- **Cambiar idioma:** Usa el selector de idioma en la esquina superior derecha
-- **Cancelar proceso:** Haz clic en el boton que esta en proceso (cambia a "Cancelar") para detenerlo
-- **Limpiar salida:** Haz clic en "Limpiar" para borrar el texto generado
-
----
-
-## Atajos de teclado
-
-| Atajo | Accion |
-|-------|--------|
-| `Ctrl+1` | Cambiar a pestana PvPoke |
-| `Ctrl+2` | Cambiar a pestana Dialgadex |
-| `Ctrl+T` | Cambiar tema (claro/oscuro) |
-| `Ctrl+Q` | Cerrar programa |
-
----
-
-## Requisitos
-
-- Python 3.8 o superior
-- tkinter (incluido con Python en Windows, en Linux hay que instalarlo aparte)
-- Pillow (PIL)
-- requests
-- Conexion a internet para descargar datos de PvPoke y DialgaDex
+* **Consumo de API:** Las consultas se realizan bajo demanda a los servidores de PokéAPI. Al procesar listas muy extensas o cadenas con decenas de IDs, el programa puede tardar unos segundos en responder mientras asegura los datos de origen.
+* **Persistencia del Idioma:** Cambiar el selector de idioma en cualquiera de las dos pestañas actualiza de forma global las preferencias de traducción y nomenclatura para todo el entorno de trabajo.
