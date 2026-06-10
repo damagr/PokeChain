@@ -693,11 +693,11 @@ class PvPokeTab(ttk.Frame):
         prefijo_shadow = get_prefijo_shadow(idioma)
         prefijo_liga = self._get_prefijo_liga(self._current_liga, idioma)
         items = []
-        for id_num, es_shadow in self._cache_ids:
+        for id_num, nombre, es_shadow in self._cache_ids:
             pref = prefijo_shadow if es_shadow else ""
-            items.append(f"{pref}+{id_num}")
-        lista_ordenada = sorted(items, key=criterio_ordenacion)
-        cadena_ids = ";".join(lista_ordenada)
+            items.append((id_num, f"{pref}+{nombre}"))
+        lista_ordenada = sorted(items, key=lambda x: x[0])
+        cadena_ids = ";".join(item[1] for item in lista_ordenada)
         resultado = prefijo_liga + cadena_ids + "&!#" if prefijo_liga else cadena_ids + "&!#"
         self.output.set_text(resultado)
         self.output.set_state(tk.DISABLED)
@@ -826,7 +826,8 @@ class PvPokeTab(ttk.Frame):
             if not padre:
                 break
             datos_especie = padre
-        return (datos_especie["id"], es_shadow)
+        nombre_base = datos_especie["name"]
+        return (datos_especie["id"], nombre_base, es_shadow)
 
     def _copiar(self):
         contenido = self.output.get_text().strip()
@@ -977,11 +978,12 @@ class DialgadexTab(ttk.Frame):
         prefijo_shadow = get_prefijo_shadow(idioma)
         prefijo_calidad = "4*;3*&3-attack&" if idioma == "English" else "4*;3*&3-ataque&"
         items = []
-        for id_base, es_shadow in self._cache_ids:
+        for id_base, nombre, es_shadow in self._cache_ids:
             pref = prefijo_shadow if es_shadow else ""
-            items.append(f"{pref}+{id_base}")
-        lista_ordenada = sorted(items, key=criterio_ordenacion)
-        resultado = prefijo_calidad + ";".join(lista_ordenada) + "&!#"
+            items.append((id_base, f"{pref}+{nombre}"))
+        lista_ordenada = sorted(items, key=lambda x: x[0])
+        cadena_ids = ";".join(item[1] for item in lista_ordenada)
+        resultado = prefijo_calidad + cadena_ids + "&!#"
         self.output.set_text(resultado)
         self.output.set_state(tk.DISABLED)
 
@@ -1040,6 +1042,7 @@ class DialgadexTab(ttk.Frame):
             id_pokemon = int(p["id"])
             es_shadow = p.get("shadow", False)
             nombre = p.get("name", "")
+            nombre_base = nombre
             if nombre:
                 nombre_clean = limpiar_nombre_especie(nombre)
                 nombre_clean = re.sub(r"^Primal\s+", "", nombre_clean)
@@ -1048,7 +1051,7 @@ class DialgadexTab(ttk.Frame):
                     id_base = self.api.buscar_anteevolucion(nombre_clean)
                     if id_base:
                         id_pokemon = int(id_base)
-            entrada = (id_pokemon, es_shadow)
+            entrada = (id_pokemon, nombre_base.lower(), es_shadow)
 
             if entrada not in self._cache_ids:
                 self._cache_ids.append(entrada)
