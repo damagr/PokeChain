@@ -558,6 +558,19 @@ class ApiCache:
             datos = padre
         return str(datos["id"])
 
+    def buscar_anteevolucion_con_nombre(self, nombre):
+        """Retorna (id, nombre_base) de la anteevolución más lejana."""
+        url = f"https://pokeapi.co/api/v2/pokemon-species/{nombre.lower().strip()}/"
+        datos = self.consulta_api(url)
+        if not datos:
+            return None
+        while datos.get("evolves_from_species"):
+            padre = self.consulta_api(datos["evolves_from_species"]["url"])
+            if not padre:
+                break
+            datos = padre
+        return (str(datos["id"]), datos["name"])
+
 
 # ==========================================
 # PESTAÑA 1 — PVP
@@ -1048,10 +1061,11 @@ class DialgadexTab(ttk.Frame):
                 nombre_clean = re.sub(r"^Primal\s+", "", nombre_clean)
                 nombre_clean = nombre_clean.replace("_", "-").replace(" ", "-").lower().strip("-")
                 if nombre_clean:
-                    id_base = self.api.buscar_anteevolucion(nombre_clean)
-                    if id_base:
+                    resultado = self.api.buscar_anteevolucion_con_nombre(nombre_clean)
+                    if resultado:
+                        id_base, nombre_anteevolucion = resultado
                         id_pokemon = int(id_base)
-                        nombre_base = nombre_clean
+                        nombre_base = nombre_anteevolucion
             entrada = (id_pokemon, nombre_base.lower(), es_shadow)
 
             if entrada not in self._cache_ids:
