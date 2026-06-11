@@ -705,10 +705,12 @@ class PvPokeTab(ttk.Frame):
         idioma = self.idioma_var.get()
         prefijo_shadow = get_prefijo_shadow(idioma)
         prefijo_liga = self._get_prefijo_liga(self._current_liga, idioma)
+        hay_shadow = any(es_shadow for _, _, es_shadow in self._cache_ids)
+        if hay_shadow:
+            prefijo_liga += prefijo_shadow
         items = []
-        for id_num, nombre, es_shadow in self._cache_ids:
-            pref = prefijo_shadow if es_shadow else ""
-            items.append((id_num, f"{pref}+{nombre}"))
+        for id_num, nombre, _ in self._cache_ids:
+            items.append((id_num, f"+{nombre}"))
         lista_ordenada = sorted(items, key=lambda x: x[0])
         cadena_ids = ";".join(item[1] for item in lista_ordenada)
         resultado = prefijo_liga + cadena_ids + "&!#" if prefijo_liga else cadena_ids + "&!#"
@@ -991,10 +993,12 @@ class DialgadexTab(ttk.Frame):
         idioma = self.idioma_var.get()
         prefijo_shadow = get_prefijo_shadow(idioma)
         prefijo_calidad = "4*;3*&3-attack&" if idioma == "English" else "4*;3*&3-ataque&"
+        hay_shadow = any(es_shadow for _, _, es_shadow in self._cache_ids)
+        if hay_shadow:
+            prefijo_calidad += prefijo_shadow
         items = []
-        for id_base, nombre, es_shadow in self._cache_ids:
-            pref = prefijo_shadow if es_shadow else ""
-            items.append((id_base, f"{pref}+{nombre}"))
+        for id_base, nombre, _ in self._cache_ids:
+            items.append((id_base, f"+{nombre}"))
         lista_ordenada = sorted(items, key=lambda x: x[0])
         cadena_ids = ";".join(item[1] for item in lista_ordenada)
         resultado = prefijo_calidad + cadena_ids + "&!#"
